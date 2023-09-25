@@ -1,0 +1,12 @@
+[package]
+name = "zk-fhe"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition" }
+ark-poly="0.4.2"
+ark-bn254="0.4.0"
+ark-ff="0.4.2"
