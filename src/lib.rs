@@ -1,2 +1,2 @@
 pub mod chips;
-mod poly_utils;
+pub mod poly_utils;

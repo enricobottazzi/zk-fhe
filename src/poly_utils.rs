@@ -1,6 +1,7 @@
 use ark_bn254::Fr;
 use ark_ff::fields::PrimeField;
 use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial};
+use halo2_base::utils::ScalarField;
 
 // Process polynomial coefficients to fit in the [0, q) range
 // q is the modulus of the cipher text field
@@ -50,6 +51,16 @@ fn reduce_poly_by_modulus(poly: DensePolynomial<Fr>, q: u64) -> DensePolynomial<
             .map(|x| Fr::from(*x))
             .collect::<Vec<Fr>>(),
     )
+}
+
+pub fn poly_to_scalar_field_coeffs<F: ScalarField>(poly: DensePolynomial<Fr>) -> Vec<F> {
+    poly.coeffs
+        .iter()
+        .map(|x| {
+            let coeff_string = x.into_bigint().to_string();
+            F::from_str_vartime(&coeff_string).unwrap()
+        })
+        .collect()
 }
 
 #[cfg(test)]
