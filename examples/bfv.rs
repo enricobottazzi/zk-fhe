@@ -12,29 +12,24 @@ use halo2_scaffold::scaffold::run_builder_on_inputs;
 use serde::{Deserialize, Serialize};
 use zk_fhe::chips::poly_operations::{poly_add, poly_mul, poly_scalar_mul};
 
-const N: u64 = 1024;
-const Q: u64 = (2 ^ 29) - 3; // 536870909
-const T: u64 = 7;
-const B: u64 = 30;
-
 /// Circuit inputs for BFV encryption operations
 ///
 /// # Type Parameters
 ///
-/// * `N`: Degree of the cyclotomic polynomial
+/// * `N`: Degree of the cyclotomic polynomial of the polynomial ring R_q.
 /// * `Q`: Modulus of the cipher text field
 /// * `T`: Modulus of the plaintext field
 /// * `DELTA` : Q/T rounded to the lower integer
-/// * `B`: Upper bound of the Gaussian distribution. It is defined as 6 * sigma
+/// * `B`: Upper bound of the Gaussian distribution Chi Error. It is defined as 6 * sigma
 ///
 /// # Fields
 ///
-/// * `pk0`: Public key 0 polynomial coefficients [a_0, a_1, ..., a_N] where a_i is the coefficient of x^i
-/// * `pk1`: Public key 1 polynomial coefficients [a_0, a_1, ..., a_N] where a_i is the coefficient of x^i
-/// * `m`: Plaintext polynomial coefficients [a_0, a_1, ..., a_N] where a_i is the coefficient of x^i. Represents the message to be encrypted
-/// * `u`: Ephemeral key polynomial coefficients from the distribution ChiKey
-/// * `e0`: Error polynomial coefficients from the distribution ChiError
-/// * `e1`: Error polynomial coefficients from the distribution ChiError
+/// * `pk0`: Public key 0 polynomial coefficients [a_0, a_1, ..., a_N-1] where a_i is the coefficient of x^i
+/// * `pk1`: Public key 1 polynomial coefficients [a_0, a_1, ..., a_N-1] where a_i is the coefficient of x^i
+/// * `m`: Plaintext polynomial coefficients [a_0, a_1, ..., a_N-1] where a_i is the coefficient of x^i. Represents the message to be encrypted
+/// * `u`: Ephemeral key polynomial coefficients from the distribution ChiKey [a_0, a_1, ..., a_N-1]
+/// * `e0`: Error polynomial coefficients from the distribution ChiError [a_0, a_1, ..., a_N-1]
+/// * `e1`: Error polynomial coefficients from the distribution ChiError [a_0, a_1, ..., a_N-1]
 
 ///
 /// # Assumes that the following checks have been performed outside the circuit
@@ -44,16 +39,26 @@ const B: u64 = 30;
 /// -  If n is the number of bits of Q, and m is the number of bits of the prime field of the circuit. n must be set such that (n * 2) + 2 < m to avoid overflow of the coefficients of the polynomials
 /// - `T` must be a prime number and must be greater than 1 and less than `Q`
 /// - `B` must be a positive integer
-/// - `pk0` and `pk1` must be polynomials in the R_q ring
+/// - `pk0` and `pk1` must be polynomials in the R_q ring. The ring R_q is defined as R_q = Z_q[x]/(x^N + 1)
+
+// N and Q Parameters of the BFV encryption scheme chosen according to TABLES of RECOMMENDED PARAMETERS for 128-bits security level
+// https://homomorphicencryption.org/wp-content/uploads/2018/11/HomomorphicEncryptionStandardv1.1.pdf
+// B is the upper bound of the distribution Chi Error. We pick standard deviation 𝜎 ≈ 3.2 according to the HomomorphicEncryptionStandardv1 paper.
+// T has been picked according to Lattigo (https://github.com/tuneinsight/lattigo/blob/master/bfv/params.go) implementation
+// As suggest by https://eprint.iacr.org/2021/204.pdf (paragraph 2) we take B = 6σerr
+const N: u64 = 1024;
+const Q: u64 = (2 ^ 29) - 3;
+const T: u64 = 65537;
+const B: u64 = 18;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CircuitInput<const N: u64, const Q: u64, const T: u64, const B: u64> {
-    pub pk0: Vec<u64>, // polynomial coefficients [a_0, a_1, ..., a_N] where a_i is the coefficient of x^i. Lives in R_q
-    pub pk1: Vec<u64>, // polynomial coefficients [a_0, a_1, ..., a_N] where a_i is the coefficient of x^i. Lives in R_q
-    pub m: Vec<u64>, // polynomial coefficients [a_0, a_1, ..., a_N] where a_i is the coefficient of x^i. Lives in R_t
-    pub u: Vec<u64>, // polynomial coefficients [a_0, a_1, ..., a_N] where a_i is the coefficient of x^i. Lives in R_q
-    pub e0: Vec<u64>, // polynomial coefficients [a_0, a_1, ..., a_N] where a_i is the coefficient of x^i. Lives in R_q
-    pub e1: Vec<u64>, // polynomial coefficients [a_0, a_1, ..., a_N] where a_i is the coefficient of x^i. Lives in R_q
+    pub pk0: Vec<u64>, // polynomial coefficients [a_0, a_1, ..., a_N-1] where a_i is the coefficient of x^i. Should live in R_q (to be checked outside the circuit)
+    pub pk1: Vec<u64>, // polynomial coefficients [a_0, a_1, ..., a_N-1] where a_i is the coefficient of x^i. Should live in R_q (to be checked outside the circuit)
+    pub m: Vec<u64>, // polynomial coefficients [a_0, a_1, ..., a_N-1] where a_i is the coefficient of x^i. Should in R_t (checked inside the circuit)
+    pub u: Vec<u64>, // polynomial coefficients [a_0, a_1, ..., a_N-1] where a_i is the coefficient of x^i. Lives in R_q (checked inside the circuit)
+    pub e0: Vec<u64>, // polynomial coefficients [a_0, a_1, ..., a_N-1] where a_i is the coefficient of x^i. Lives in R_q (checked inside the circuit)
+    pub e1: Vec<u64>, // polynomial coefficients [a_0, a_1, ..., a_N-1] where a_i is the coefficient of x^i. Lives in R_q (checked inside the circuit)
 }
 
 fn bfv_encryption_circuit<F: ScalarField>(
@@ -111,8 +116,8 @@ fn bfv_encryption_circuit<F: ScalarField>(
 
     // TO DO: Check if e0 and e1 are correcly sampled from the distribution ChiError
     // TO DO: Check if u is correcly sampled from the distribution ChiKey
-    // TO DO: Check if m belongs to the R_t ring
-    // TO DO: Check if e0, e1 and u are polynomials in the R_q ring
+    // TO DO: Check if m belongs to the R_t ring => Coefficients must be in the [0, T) range and the degree of m must be N - 1
+    // TO DO: Check if e0, e1 and u are polynomials in the R_q ring => Coefficients must be in the [0, Q) range and the degree of e0, e1 and u must be N - 1
 
     let gate = GateChip::<F>::default();
 
@@ -124,11 +129,12 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // The expansion rate of the coefficients of pk0_u is 2n bits.
     // If n = 29 bits, the maximum expansion of the coefficients of pk0_u is 58 bits, which is below the prime field of the circuit (254 bits)
     // No risk of coefficients overflowing the circuit prime field when multiplying pk0 by u
-    let pk0_u = poly_mul::<N, F>(ctx, pk0, u.clone(), &gate);
+    let pk0_u = poly_mul::<{ N - 1 }, F>(ctx, pk0, u.clone(), &gate);
 
     // TO DO: reduce the coefficients of pk0_u by the cyclotomic polynomial of degree `N` => x^N + 1.
-    // By doing this, pk0_u will be reduced to a polynomial of degree `N`
-    const DELTA: u64 = Q / T;
+    // By doing this, pk0_u will be reduced to a polynomial of degree `N - 1`
+
+    const DELTA: u64 = Q / T; // Q/T rounded to the lower integer
 
     // m * delta
     // The coefficients of m are in the range [0, T) according to the check performed inside the circuit.
@@ -136,7 +142,7 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // If both Q and T have n bits (in practice T is much smaller than Q), the expansion rate of the coefficients of m_delta is 2n bits.
     // If n = 29 bits, the maximum expansion of the coefficients of m_delta is 58 bits, which is below the prime field of the circuit (254 bits)
     // No risk of coefficients overflowing the circuit prime field when multiplying m by delta
-    let m_delta = poly_scalar_mul::<N, F>(ctx, m, Constant(F::from(DELTA)), &gate);
+    let m_delta = poly_scalar_mul::<{ N - 1 }, F>(ctx, m, Constant(F::from(DELTA)), &gate);
 
     // TO DO: perform pk0 * u + m * delta
 
@@ -159,6 +165,7 @@ fn bfv_encryption_circuit<F: ScalarField>(
 
     // TO DO: reduce the cofficients of c0 by modulo `Q`
     // TO DO: further reduce the coefficients of c0 by the cyclotomic polynomial of degree `N` => x^N + 1
+    // As a result, c0 will be a polynomial inside the R_q ring
 
     // COMPUTE C1
 
@@ -168,10 +175,10 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // The expansion rate of the coefficients of pk1_u is 2n bits.
     // If n = 29 bits, the maximum expansion of the coefficients of pk1_u is 58 bits, which is below the prime field of the circuit (254 bits)
     // No risk of coefficients overflowing the circuit prime field when multiplying pk1 by u
-    let pk1_u = poly_mul::<N, F>(ctx, pk1, u, &gate);
+    let pk1_u = poly_mul::<{ N - 1 }, F>(ctx, pk1, u, &gate);
 
     // TO DO: reduce the coefficients of pk1_u by the cyclotomic polynomial of degree `N` => x^N + 1.
-    // By doing this, pk1_u will be reduced to a polynomial of degree `N`
+    // By doing this, pk1_u will be reduced to a polynomial of degree `N - 1`
 
     // The coefficients of pk1_u are in the [0, 2^2n) range according to the operations performed above (where n is the number of bits of Q)
     // The coefficients of e1 are either [0, 1, Q-1] according to the check performed inside the circuit. The maximum value of a coefficient of e1 is n bits.
@@ -184,6 +191,7 @@ fn bfv_encryption_circuit<F: ScalarField>(
 
     // TO DO: reduce the cofficients of c0 by modulo `Q`
     // TO DO: further reduce the coefficients of c0 by the cyclotomic polynomial of degree `N` => x^N + 1
+    // As a result, c1 will be a polynomial inside the R_q ring
 
     // TO DO: Expose to the public the coefficients of c0 and c1
     // TO DO: Expose to the public pk0 and pk1
@@ -194,31 +202,33 @@ fn main() {
 
     let args = Cli::parse();
 
-    // create polynomials pk0 and pk1 of degree N with random coefficients in the range [0, Q)
-    let pk0 = (0..N + 1)
+    // create polynomials pk0 and pk1 of degree N - 1 with random coefficients in the range [0, Q)
+    let pk0 = (0..N)
         .map(|_| rand::random::<u64>() % Q)
         .collect::<Vec<u64>>();
 
-    let pk1 = (0..N + 1)
+    let pk1 = (0..N)
         .map(|_| rand::random::<u64>() % Q)
         .collect::<Vec<u64>>();
 
-    // create polynomial m of degree N with random coefficients in the range [0, T)
-    let m = (0..N + 1)
+    // create polynomial m of degree N - 1 with random coefficients in the range [0, T)
+    let m = (0..N)
         .map(|_| rand::random::<u64>() % T)
         .collect::<Vec<u64>>();
 
-    // create polynomial u of degree N with random coefficients in the range [0, B]
-    let u = (0..N + 1)
+    // create polynomial u of degree N - 1 with random coefficients in the range [0, B]
+    let u = (0..N)
         .map(|_| rand::random::<u64>() % B)
         .collect::<Vec<u64>>();
 
-    // create polynomial e0 of degree N with random coefficients in the range [0, 1]
-    let e0 = (0..N + 1)
+    // create polynomial e0 of degree N - 1 with random coefficients in the range [0, 1] or [Q - 1]
+    // TO DO: fix the range of e0 coefficients
+    let e0 = (0..N)
         .map(|_| rand::random::<u64>() % 2)
         .collect::<Vec<u64>>();
 
-    // create polynomial e1 of degree N with random coefficients in the range [0, 1]
+    // create polynomial e1 of degree N - 1 with random coefficients in the range [0, 1] or [Q - 1]
+    // TO DO: fix the range of e1 coefficients
     let e1 = (0..N + 1)
         .map(|_| rand::random::<u64>() % 2)
         .collect::<Vec<u64>>();
