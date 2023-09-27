@@ -67,6 +67,14 @@ fn bfv_encryption_circuit<F: ScalarField>(
     input: CircuitInput<N, Q, T, B>,
     make_public: &mut Vec<AssignedValue<F>>,
 ) {
+    // assert that the input polynomials have the same degree and this is equal to N - 1
+    assert_eq!(input.pk0.len(), N as usize);
+    assert_eq!(input.pk1.len(), N as usize);
+    assert_eq!(input.m.len(), N as usize);
+    assert_eq!(input.u.len(), N as usize);
+    assert_eq!(input.e0.len(), N as usize);
+    assert_eq!(input.e1.len(), N as usize);
+
     // Assign the input polynomials to the circuit
     let pk0: Vec<AssignedValue<F>> = input
         .pk0
@@ -294,7 +302,7 @@ fn main() {
 
     // create polynomial e1 of degree N - 1 with random coefficients in the range [0, 1] or [Q - 1]
     // TO DO: fix the range of e1 coefficients
-    let e1 = (0..N + 1)
+    let e1 = (0..N)
         .map(|_| rand::random::<u64>() % 2)
         .collect::<Vec<u64>>();
 
