@@ -16,7 +16,7 @@ use zk_fhe::chips::poly_operations::{poly_add, poly_mul, poly_scalar_mul};
 ///
 /// # Type Parameters
 ///
-/// * `N`: Degree of the cyclotomic polynomial of the polynomial ring R_q.
+/// * `N`: Degree of the cyclotomic polynomial `cyclo` of the polynomial ring R_q.
 /// * `Q`: Modulus of the cipher text field
 /// * `T`: Modulus of the plaintext field
 /// * `DELTA` : Q/T rounded to the lower integer
@@ -40,6 +40,7 @@ use zk_fhe::chips::poly_operations::{poly_add, poly_mul, poly_scalar_mul};
 /// - `T` must be a prime number and must be greater than 1 and less than `Q`
 /// - `B` must be a positive integer
 /// - `pk0` and `pk1` must be polynomials in the R_q ring. The ring R_q is defined as R_q = Z_q[x]/(x^N + 1)
+/// - `cyclo` must be the cyclotomic polynomial of degree `N` => x^N + 1
 
 // N and Q Parameters of the BFV encryption scheme chosen according to TABLES of RECOMMENDED PARAMETERS for 128-bits security level
 // https://homomorphicencryption.org/wp-content/uploads/2018/11/HomomorphicEncryptionStandardv1.1.pdf
@@ -47,7 +48,7 @@ use zk_fhe::chips::poly_operations::{poly_add, poly_mul, poly_scalar_mul};
 // T has been picked according to Lattigo (https://github.com/tuneinsight/lattigo/blob/master/bfv/params.go) implementation
 // As suggest by https://eprint.iacr.org/2021/204.pdf (paragraph 2) we take B = 6σerr
 const N: u64 = 1024;
-const Q: u64 = (2 ^ 29) - 3;
+const Q: u64 = (1 << 29) - 3;
 const T: u64 = 65537;
 const B: u64 = 18;
 
@@ -114,6 +115,8 @@ fn bfv_encryption_circuit<F: ScalarField>(
 
     let e1 = input.e1.iter().map(|x| F::from(*x)).collect::<Vec<F>>();
 
+    // TO DO: Assign cyclotomic polynomial `cyclo` to the circuit
+
     // TO DO: Check if e0 and e1 are correcly sampled from the distribution ChiError
     // TO DO: Check if u is correcly sampled from the distribution ChiKey
     // TO DO: Check if m belongs to the R_t ring => Coefficients must be in the [0, T) range and the degree of m must be N - 1
@@ -139,6 +142,32 @@ fn bfv_encryption_circuit<F: ScalarField>(
 
     // TO DO: reduce the coefficients of pk0_u by the cyclotomic polynomial of degree `N` => x^N + 1
     // By doing this, pk0_u will be reduced to a polynomial of degree `N - 1`
+
+    // The operation involes checking that quotient * denominator + remainder = numerator where numerator is pk0_u, denominator is x^N + 1 and quotient and remainder are the result of the division
+    // The remainder is the result of the modulo reduction
+    // OVERFLOW ANALYSIS
+    // The coefficients of pk0_u are in the [0, 2^2n) range according to the operations performed above
+    // Denominator is equal to the `cyclo` polynomial. The coefficients of `cyclo` are in the either 0 or 1 according to the check performed outside the circuit.
+    // Considering the case in which the remainder is 0, the numerator is obtained as linear combination of the coefficients of the quotient and the coefficients of the denominator.
+    // Therefore the coefficients of the quotient must be in the [0, 2^2n) range too.
+    // Considering the case in which the quotient is 0, the remainder is equal to the numerator. Therefore the coefficients of the remainder must be in the [0, 2^2n) range too.
+    // We need to enforce that the coefficients of the quotient and the remainder are in the [0, 2^2n) range in order to avoid overflow when performing the multiplication between the quotient and the denominator and the addition between the result of the multiplication and the remainder.
+    // TO DO: set a range check on the coefficients of the quotient and the remainder to be in the [0, 2^2n) range
+
+    // DEGREE ANALYSIS
+    // 1. PolyMul between quotient and denominator is performed.
+    // The denominator is x^N + 1, which is a polynomial of degree N
+    // The quotient can be a polynomial of max degree 2N - 2 - N = N - 2(if the remainder is 0)
+    // To perform the multiplication between the quotient and the denominator, the quotient must be padded with zeroes at the end to have the same degree of the denominator (N)
+    // The last 2 coefficients of the result of the multiplication are discarded as these are zeroes. Set a constraint to check that the first 2 coefficients are zero then discard them.
+    // The result of the multiplication between the quotient and the denominator (and after discarding the first 2 coefficients) is a polynomial of degree 2N - 2.
+    //
+    // 2. PolyAdd between the result of the multiplication and the remainder is performed.
+    // The result of the multiplication is a polynomial of degree 2N - 2
+    // The remainder is a polynomial of degree at max N - 1. (The degree of the remainder is strictly less than the degree of the denominator)
+    // In order to perform the addition, the remainder must be padded with zeroes to have the same degree of the result of the multiplication (2N - 2)
+    //
+    // 3. Check that the result of the addition (of degree 2N - 2) is equal to the numerator pk0_u (of degree 2N - 2)
     const DELTA: u64 = Q / T; // Q/T rounded to the lower integer
 
     // m * delta
@@ -230,6 +259,7 @@ fn bfv_encryption_circuit<F: ScalarField>(
 
     // TO DO: Expose to the public the coefficients of c0 and c1
     // TO DO: Expose to the public pk0 and pk1
+    // TO DO: Expose to the public `cyclo`
 }
 
 fn main() {
