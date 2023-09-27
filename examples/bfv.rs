@@ -124,69 +124,104 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // COMPUTE C0
 
     // pk0 * u
+    // OVERFLOW ANALYSIS
     // The coefficients of pk0 are in the range [0, Q) according to the check to be performed outside the circuit. If Q has n bits, pk0 can have at most n bits.
     // The coefficients of u are in the range [0, B] [Q-B, Q-1] according to check performed inside the circuit. If Q has n bits, u can have at most n bits.
     // The expansion rate of the coefficients of pk0_u is 2n bits.
     // If n = 29 bits, the maximum expansion of the coefficients of pk0_u is 58 bits, which is below the prime field of the circuit (254 bits)
     // No risk of coefficients overflowing the circuit prime field when multiplying pk0 by u
+
+    // DEGREE ANALYSIS
+    // The degree of pk0 is N - 1
+    // The degree of u is N - 1
+    // The degree of pk0_u is N - 1 + N - 1 = 2N - 2
     let pk0_u = poly_mul::<{ N - 1 }, F>(ctx, pk0, u.clone(), &gate);
 
-    // TO DO: reduce the coefficients of pk0_u by the cyclotomic polynomial of degree `N` => x^N + 1.
+    // TO DO: reduce the coefficients of pk0_u by the cyclotomic polynomial of degree `N` => x^N + 1
     // By doing this, pk0_u will be reduced to a polynomial of degree `N - 1`
-
     const DELTA: u64 = Q / T; // Q/T rounded to the lower integer
 
     // m * delta
+    // OVERFLOW ANALYSIS
     // The coefficients of m are in the range [0, T) according to the check performed inside the circuit.
     // Delta is a constant in the range [0, Q) as it is defined as Q/T rounded to the lower integer and T < Q and T > 1
     // If both Q and T have n bits (in practice T is much smaller than Q), the expansion rate of the coefficients of m_delta is 2n bits.
     // If n = 29 bits, the maximum expansion of the coefficients of m_delta is 58 bits, which is below the prime field of the circuit (254 bits)
     // No risk of coefficients overflowing the circuit prime field when multiplying m by delta
+
+    // DEGREE ANALYSIS
+    // The degree of m is N - 1
+    // The degree of delta is 0
+    // The degree of m_delta is N - 1 + 0 = N - 1
     let m_delta = poly_scalar_mul::<{ N - 1 }, F>(ctx, m, Constant(F::from(DELTA)), &gate);
 
     // TO DO: perform pk0 * u + m * delta
 
+    // OVERFLOW ANALYSIS
     // The coefficients of pk0_u are in the [0, 2^2n) range according to the operations performed above (where n is the number of bits of Q)
     // The coefficients of m_delta are in the [0, 2^2n) range according to the operations performed above (where n is the number of bits of Q)
     // If both pk0_u and m_delta have 2n bits, the expansion rate of the coefficients of pk0_u_plus_m_delta is 2n + 1 bits.
     // If n = 29 bits, the maximum expansion of the coefficients of pk0_u_plus_m_delta is 59 bits, which is below the prime field of the circuit (254 bits)
     // No risk of coefficients overflowing the circuit prime field when adding pk0_u by m_delta
+
+    // DEGREE ANALYSIS
+    // The degree of pk0_u is N - 1
+    // The degree of m_delta is N - 1
+    // The degree of pk0_u_plus_m_delta is N - 1
     // let pk0_u_plus_m_delta = poly_add::<N, F>(ctx, pk0_u, m_delta, &gate);
 
     // TO DO: perform pk0 * u + m * delta + e0 to get c0
 
+    // OVERFLOW ANALYSIS
     // The coefficients of pk0_u_plus_m_delta are in the [0, 2^2n+1) range according to the operations performed above (where n is the number of bits of Q)
     // The coefficients of e0 are either [0, 1, Q-1] according to the check performed inside the circuit. The maximum value of a coefficient of e0 is n bits.
     // If pk0_u_plus_m_delta has 2n+1 bits and e0 has n bits, the expansion rate of the coefficients of c0 is 2n + 1 + 1 bits.
     // If n = 29 bits, the maximum expansion of the coefficients of c0 is 60 bits, which is below the prime field of the circuit (254 bits)
     // No risk of coefficients overflowing the circuit prime field when adding pk0_u_plus_m_delta by e0
 
+    // DEGREE ANALYSIS
+    // The degree of pk0_u_plus_m_delta is N - 1
+    // The degree of e0 is N - 1
+    // The degree of c0 is N - 1
     // let c0 = poly_add::<N, F>(ctx, pk0_u_plus_m_delta, e0, &gate);
 
     // TO DO: reduce the cofficients of c0 by modulo `Q`
-    // TO DO: further reduce the coefficients of c0 by the cyclotomic polynomial of degree `N` => x^N + 1
+    // TO DO: further reduce the coefficients of c0 by the cyclotomic polynomial of degree `N` => x^N + 1 (this second reduction might not be necessary, to check)
     // As a result, c0 will be a polynomial inside the R_q ring
 
     // COMPUTE C1
 
     // pk1 * u
+
+    // OVERFLOW ANALYSIS
     // The coefficients of pk1 are in the range [0, Q) according to the check to be performed outside the circuit. If Q has n bits, pk1 can have at most n bits.
     // The coefficients of u are in the range [0, B] [Q-B, Q-1] according to check performed inside the circuit. If Q has n bits, u can have at most n bits.
     // The expansion rate of the coefficients of pk1_u is 2n bits.
     // If n = 29 bits, the maximum expansion of the coefficients of pk1_u is 58 bits, which is below the prime field of the circuit (254 bits)
     // No risk of coefficients overflowing the circuit prime field when multiplying pk1 by u
+
+    // DEGREE ANALYSIS
+    // The degree of pk1 is N - 1
+    // The degree of u is N - 1
+    // The degree of pk1_u is N - 1 + N - 1 = 2N - 2
     let pk1_u = poly_mul::<{ N - 1 }, F>(ctx, pk1, u, &gate);
 
     // TO DO: reduce the coefficients of pk1_u by the cyclotomic polynomial of degree `N` => x^N + 1.
     // By doing this, pk1_u will be reduced to a polynomial of degree `N - 1`
 
+    // TO DO: perform pk1 * u + e1 to get c1
+
+    // OVERFLOW ANALYSIS
     // The coefficients of pk1_u are in the [0, 2^2n) range according to the operations performed above (where n is the number of bits of Q)
     // The coefficients of e1 are either [0, 1, Q-1] according to the check performed inside the circuit. The maximum value of a coefficient of e1 is n bits.
     // If pk1_u has 2n bits and e0 has n bits, the expansion rate of the coefficients of c1 is 2n + 1 bits.
     // If n = 29 bits, the maximum expansion of the coefficients of c0 is 59 bits, which is below the prime field of the circuit (254 bits)
     // No risk of coefficients overflowing the circuit prime field when adding pk0_u_plus_m_delta by e0
 
-    // TO DO: perform pk1 * u + e1 to get c1
+    // DEGREE ANALYSIS
+    // The degree of pk1_u is N - 1
+    // The degree of e1 is N - 1
+    // The degree of c1 is N - 1
     // let c1 = poly_add::<N, F>(ctx, pk1_u, e1, &gate);
 
     // TO DO: reduce the cofficients of c0 by modulo `Q`
