@@ -5,8 +5,8 @@ use halo2_base::AssignedValue;
 use halo2_base::Context;
 use halo2_base::QuantumCell;
 
-// Build the sum of the polynomials a and b as sum of the coefficients
-// N is the degree of the polynomial
+/// Build the sum of the polynomials a and b as sum of the coefficients
+/// N is the degree of the polynomials
 pub fn poly_add<const N: u64, F: ScalarField>(
     ctx: &mut Context<F>,
     a: Vec<AssignedValue<F>>,
@@ -27,7 +27,8 @@ pub fn poly_add<const N: u64, F: ScalarField>(
     c
 }
 
-// Build the product of the polynomials a and b as dot product of the coefficients of a and b
+/// Build the product of the polynomials a and b as dot product of the coefficients of a and b
+/// N is the degree of the polynomials
 pub fn poly_mul<const N: u64, F: ScalarField>(
     ctx: &mut Context<F>,
     a: Vec<AssignedValue<F>>,
@@ -70,7 +71,8 @@ pub fn poly_mul<const N: u64, F: ScalarField>(
     c
 }
 
-// Build the scalar multiplication of the polynomials a and the scalar k as scalar multiplication of the coefficients of a and k
+/// Build the scalar multiplication of the polynomials a and the scalar k as scalar multiplication of the coefficients of a and k
+/// N is the degree of the polynomial
 pub fn poly_scalar_mul<const N: u64, F: ScalarField>(
     ctx: &mut Context<F>,
     a: Vec<AssignedValue<F>>,

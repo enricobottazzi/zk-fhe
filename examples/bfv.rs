@@ -1,7 +1,10 @@
+use std::env::var;
 use std::vec;
 
 use clap::Parser;
 use halo2_base::gates::GateChip;
+use halo2_base::safe_types::RangeChip;
+use halo2_base::safe_types::RangeInstructions;
 use halo2_base::utils::ScalarField;
 use halo2_base::AssignedValue;
 use halo2_base::Context;
@@ -9,6 +12,9 @@ use halo2_base::QuantumCell::Constant;
 use halo2_scaffold::scaffold::cmd::Cli;
 use halo2_scaffold::scaffold::run;
 use serde::{Deserialize, Serialize};
+use zk_fhe::chips::distribution::{
+    check_poly_from_distribution_chi_error, check_poly_from_distribution_chi_key,
+};
 use zk_fhe::chips::poly_operations::{poly_add, poly_mul, poly_scalar_mul};
 
 /// Circuit inputs for BFV encryption operations
@@ -119,6 +125,14 @@ fn bfv_encryption_circuit<F: ScalarField>(
 
     const DELTA: u64 = Q / T; // Q/T rounded to the lower integer
 
+    // lookup bits must agree with the size of the lookup table, which is specified by an environmental variable
+    let lookup_bits = var("LOOKUP_BITS")
+        .unwrap_or_else(|_| panic!("LOOKUP_BITS not set"))
+        .parse()
+        .unwrap();
+
+    let range = RangeChip::default(lookup_bits);
+
     // TO DO: Assign cyclotomic polynomial `cyclo` to the circuit
 
     /* Constraints on e0
@@ -135,7 +149,8 @@ fn bfv_encryption_circuit<F: ScalarField>(
         Same as e0
     */
 
-    // TO DO: apply the `check_poly_from_distribution_chi_error` chip to e0 and e1
+    check_poly_from_distribution_chi_error::<{ N - 1 }, Q, B, F>(ctx, e0, &range);
+    check_poly_from_distribution_chi_error::<{ N - 1 }, Q, B, F>(ctx, e1, &range);
 
     /* Constraints on u
         - u must be a polynomial in the R_q ring => Coefficients must be in the [0, Q) range and the degree of u must be N - 1
@@ -147,7 +162,7 @@ fn bfv_encryption_circuit<F: ScalarField>(
         - The assignment for loop above guarantees that the degree of u is N - 1
     */
 
-    // TO DO: apply the `check_poly_from_distribution_chi_key` chip to u
+    check_poly_from_distribution_chi_key::<{ N - 1 }, Q, F>(ctx, u, range.gate());
 
     /* Constraints on m
         - m must be a polynomial in the R_t ring => Coefficients must be in the [0, T) range and the degree of m must be N - 1
@@ -158,8 +173,6 @@ fn bfv_encryption_circuit<F: ScalarField>(
         were already in the [0, T) range
         - The assignment for loop above guarantees that the degree of m is N - 1
     */
-
-    // let gate = GateChip::<F>::default();
 
     // 1. COMPUTE C0
 
@@ -259,7 +272,7 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // TO DO: Expose to the public the coefficients of c0 and c1
     // TO DO: Expose to the public pk0 and pk1
     // TO DO: Expose to the public `cyclo`
-    
+
     // TO DO: test that c0 and c1 computed inside the circuit are equal to the ciphertexts provided as input in the json file
 }
 
