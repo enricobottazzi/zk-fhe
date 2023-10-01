@@ -1,6 +1,5 @@
-use ark_bn254::Fr;
-use ark_poly::univariate::DensePolynomial;
-use ark_poly::DenseUVPolynomial;
+use std::vec;
+
 use clap::Parser;
 use halo2_base::gates::GateChip;
 use halo2_base::utils::ScalarField;
@@ -79,205 +78,189 @@ fn bfv_encryption_circuit<F: ScalarField>(
     assert_eq!(input.c0.len(), N as usize);
     assert_eq!(input.c1.len(), N as usize);
 
+    let mut pk0 = vec![];
+    let mut pk1 = vec![];
+    let mut u = vec![];
+    let mut m = vec![];
+    let mut e0 = vec![];
+    let mut e1 = vec![];
+
     // Assign the input polynomials to the circuit
-    let pk0: Vec<AssignedValue<F>> = input
-        .pk0
-        .iter()
-        .map(|x| {
-            let result = F::from(*x);
-            ctx.load_witness(result)
-        })
-        .collect();
+    // Using a for loop from 0 to N - 1 enforces that the assigned input polynomials have the same degree and this is equal to N - 1
+    for i in 0..N as usize {
+        let pk0_val = F::from(input.pk0[i]);
+        let pk1_val = F::from(input.pk1[i]);
+        let u_val = F::from(input.u[i]);
+        let m_val = F::from(input.m[i]);
+        let e0_val = F::from(input.e0[i]);
+        let e1_val = F::from(input.e1[i]);
 
-    let pk1: Vec<AssignedValue<F>> = input
-        .pk1
-        .iter()
-        .map(|x| {
-            let result = F::from(*x);
-            ctx.load_witness(result)
-        })
-        .collect();
+        let pk0_assigned_value = ctx.load_witness(pk0_val);
+        let pk1_assigned_value = ctx.load_witness(pk1_val);
+        let u_assigned_value = ctx.load_witness(u_val);
+        let m_assigned_value = ctx.load_witness(m_val);
+        let e0_assigned_value = ctx.load_witness(e0_val);
+        let e1_assigned_value = ctx.load_witness(e1_val);
 
-    let u: Vec<AssignedValue<F>> = input
-        .u
-        .iter()
-        .map(|x| {
-            let result = F::from(*x);
-            ctx.load_witness(result)
-        })
-        .collect();
+        pk0.push(pk0_assigned_value);
+        pk1.push(pk1_assigned_value);
+        u.push(u_assigned_value);
+        m.push(m_assigned_value);
+        e0.push(e0_assigned_value);
+        e1.push(e1_assigned_value);
+    }
 
-    let m = input
-        .m
-        .iter()
-        .map(|x| {
-            let result = F::from(*x);
-            ctx.load_witness(result)
-        })
-        .collect::<Vec<AssignedValue<F>>>();
+    assert!(pk0.len() == N as usize);
+    assert!(pk1.len() == N as usize);
+    assert!(u.len() == N as usize);
+    assert!(m.len() == N as usize);
+    assert!(e0.len() == N as usize);
+    assert!(e1.len() == N as usize);
 
-    let e0 = input
-        .e0
-        .iter()
-        .map(|x| {
-            let result = F::from(*x);
-            ctx.load_witness(result)
-        })
-        .collect::<Vec<AssignedValue<F>>>();
-
-    let e1 = input.e1.iter().map(|x| F::from(*x)).collect::<Vec<F>>();
-
-    let c0 = input.c0.iter().map(|x| F::from(*x)).collect::<Vec<F>>();
-
-    let c1 = input.c1.iter().map(|x| F::from(*x)).collect::<Vec<F>>();
+    const DELTA: u64 = Q / T; // Q/T rounded to the lower integer
 
     // TO DO: Assign cyclotomic polynomial `cyclo` to the circuit
 
-    // TO DO: Check if e0 and e1 are correcly sampled from the distribution ChiError
-    // TO DO: Check if u is correcly sampled from the distribution ChiKey
-    // TO DO: Check if m belongs to the R_t ring => Coefficients must be in the [0, T) range and the degree of m must be N - 1
-    // TO DO: Check if e0, e1 and u are polynomials in the R_q ring => Coefficients must be in the [0, Q) range and the degree of e0, e1 and u must be N - 1
+    /* Constraints on e0
+        - e0 must be a polynomial in the R_q ring => Coefficients must be in the [0, Q) range and the degree of e0 must be N - 1
+        - e0 must be sampled from the distribution ChiError
 
-    let gate = GateChip::<F>::default();
+        Approach:
+        - `check_poly_from_distribution_chi_error` chip guarantees that the coefficients of e0 are in the range [0, b] OR [q-b, q-1]
+        - As this range is a subset of the [0, Q) range, the coefficients of e0 are in the [0, Q) range
+        - The assignment for loop above guarantees that the degree of e0 is N - 1
+    */
 
-    // COMPUTE C0
+    /* Constraints on e1
+        Same as e0
+    */
+
+    // TO DO: apply the `check_poly_from_distribution_chi_error` chip to e0 and e1
+
+    /* Constraints on u
+        - u must be a polynomial in the R_q ring => Coefficients must be in the [0, Q) range and the degree of u must be N - 1
+        - u must be sampled from the distribution ChiKey
+
+        Approach:
+        - `check_poly_from_distribution_chi_key` chip guarantees that the coefficients of u are in the range [0, 1, Q-1]
+        - As this range is a subset of the [0, Q) range, the coefficients of u are in the [0, Q) range
+        - The assignment for loop above guarantees that the degree of u is N - 1
+    */
+
+    // TO DO: apply the `check_poly_from_distribution_chi_key` chip to u
+
+    /* Constraints on m
+        - m must be a polynomial in the R_t ring => Coefficients must be in the [0, T) range and the degree of m must be N - 1
+
+        Approach:
+        - `reduce_poly_mod` takes as input a polynomial and a modulus and returns the polynomial reduced by the modulus.
+        The constraint set is that the input polynomial is equal to the output polynomial meaning that the coefficients of the input polynomial
+        were already in the [0, T) range
+        - The assignment for loop above guarantees that the degree of m is N - 1
+    */
+
+    // let gate = GateChip::<F>::default();
+
+    // 1. COMPUTE C0
 
     // pk0 * u
+
+    // TO DO: Perform the polynomial multiplication between pk0 and u.
+    // TO DO: Reduce the resulting polynomial by the cyclotomic polynomial of degree `N` => x^N + 1
+    // TO DO: Further reduce the coefficients by modulo `Q`
+
     // OVERFLOW ANALYSIS
-    // The coefficients of pk0 are in the range [0, Q) according to the check to be performed outside the circuit. If Q has n bits, pk0 can have at most n bits.
-    // The coefficients of u are in the range [0, B] [Q-B, Q-1] according to check performed inside the circuit. If Q has n bits, u can have at most n bits.
-    // The expansion rate of the coefficients of pk0_u is 2n bits.
-    // If n = 29 bits, the maximum expansion of the coefficients of pk0_u is 58 bits, which is below the prime field of the circuit (254 bits)
-    // No risk of coefficients overflowing the circuit prime field when multiplying pk0 by u
+    // The coefficients of pk0 are in the range [0, Q) according to the check to be performed outside the circuit.
+    // The coefficients of u are either [0, 1, Q-1] according to the constraints set above.
+    // The maximum value of the coffiecient of pk0_u is (Q-1) * (Q-1) = Q^2 - 2Q + 1.
+    // Q needs to be chosen such that Q^2 - 2Q + 1 < p where p is the prime field of the circuit in order to avoid overflow during the multiplication.
 
-    // DEGREE ANALYSIS
-    // The degree of pk0 is N - 1
-    // The degree of u is N - 1
-    // The degree of pk0_u is N - 1 + N - 1 = 2N - 2
-    let pk0_u = poly_mul::<{ N - 1 }, F>(ctx, pk0, u.clone(), &gate);
-
-    // TO DO: reduce the coefficients of pk0_u by the cyclotomic polynomial of degree `N` => x^N + 1
-    // By doing this, pk0_u will be reduced to a polynomial of degree `N - 1`
-
-    // The operation involes checking that quotient * denominator + remainder = numerator where numerator is pk0_u, denominator is x^N + 1 and quotient and remainder are the result of the division
-    // The remainder is the result of the modulo reduction
-    // OVERFLOW ANALYSIS
-    // The coefficients of pk0_u are in the [0, 2^2n) range according to the operations performed above
-    // Denominator is equal to the `cyclo` polynomial. The coefficients of `cyclo` are in the either 0 or 1 according to the check performed outside the circuit.
-    // Considering the case in which the remainder is 0, the numerator is obtained as linear combination of the coefficients of the quotient and the coefficients of the denominator.
-    // Therefore the coefficients of the quotient must be in the [0, 2^2n) range too.
-    // Considering the case in which the quotient is 0, the remainder is equal to the numerator. Therefore the coefficients of the remainder must be in the [0, 2^2n) range too.
-    // We need to enforce that the coefficients of the quotient and the remainder are in the [0, 2^2n) range in order to avoid overflow when performing the multiplication between the quotient and the denominator and the addition between the result of the multiplication and the remainder.
-    // TO DO: set a range check on the coefficients of the quotient and the remainder to be in the [0, 2^2n) range
-
-    // DEGREE ANALYSIS
-    // 1. PolyMul between quotient and denominator is performed.
-    // The denominator is x^N + 1, which is a polynomial of degree N
-    // The quotient can be a polynomial of max degree 2N - 2 - N = N - 2(if the remainder is 0)
-    // To perform the multiplication between the quotient and the denominator, the quotient must be padded with zeroes at the end to have the same degree of the denominator (N)
-    // The last 2 coefficients of the result of the multiplication are discarded as these are zeroes. Set a constraint to check that the first 2 coefficients are zero then discard them.
-    // The result of the multiplication between the quotient and the denominator (and after discarding the first 2 coefficients) is a polynomial of degree 2N - 2.
-    //
-    // 2. PolyAdd between the result of the multiplication and the remainder is performed.
-    // The result of the multiplication is a polynomial of degree 2N - 2
-    // The remainder is a polynomial of degree at max N - 1. (The degree of the remainder is strictly less than the degree of the denominator)
-    // In order to perform the addition, the remainder must be padded with zeroes to have the same degree of the result of the multiplication (2N - 2)
-    //
-    // 3. Check that the result of the addition (of degree 2N - 2) is equal to the numerator pk0_u (of degree 2N - 2)
-    const DELTA: u64 = Q / T; // Q/T rounded to the lower integer
+    // let pk0_u = poly_mul::<{ N - 1 }, F>(ctx, pk0, u.clone(), &gate);
+    // Note: pk0_u is a polynomial in the R_q ring
 
     // m * delta
-    // OVERFLOW ANALYSIS
-    // The coefficients of m are in the range [0, T) according to the check performed inside the circuit.
-    // Delta is a constant in the range [0, Q) as it is defined as Q/T rounded to the lower integer and T < Q and T > 1
-    // If both Q and T have n bits (in practice T is much smaller than Q), the expansion rate of the coefficients of m_delta is 2n bits.
-    // If n = 29 bits, the maximum expansion of the coefficients of m_delta is 58 bits, which is below the prime field of the circuit (254 bits)
-    // No risk of coefficients overflowing the circuit prime field when multiplying m by delta
 
-    // DEGREE ANALYSIS
-    // The degree of m is N - 1
-    // The degree of delta is 0
-    // The degree of m_delta is N - 1 + 0 = N - 1
-    let m_delta = poly_scalar_mul::<{ N - 1 }, F>(ctx, m, Constant(F::from(DELTA)), &gate);
-
-    // TO DO: perform pk0 * u + m * delta
+    // TO DO: Perform the polynomial scalar multiplication between m and delta.
+    // TO DO: Reduce the coefficients by modulo `Q`
+    // Note: Scalar multiplication does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `N` => x^N + 1
 
     // OVERFLOW ANALYSIS
-    // The coefficients of pk0_u are in the [0, 2^2n) range according to the operations performed above (where n is the number of bits of Q)
-    // The coefficients of m_delta are in the [0, 2^2n) range according to the operations performed above (where n is the number of bits of Q)
-    // If both pk0_u and m_delta have 2n bits, the expansion rate of the coefficients of pk0_u_plus_m_delta is 2n + 1 bits.
-    // If n = 29 bits, the maximum expansion of the coefficients of pk0_u_plus_m_delta is 59 bits, which is below the prime field of the circuit (254 bits)
-    // No risk of coefficients overflowing the circuit prime field when adding pk0_u by m_delta
+    // The coefficients of m are in the range [0, T) according to the constaints set above.
+    // Delta is a constant in the range [0, Q) as it is defined as Q/T rounded to the lower integer and T < Q and T > 1.
+    // The maximum value of the coffiecient of m_delta is (Q-1) * (T-1) = QT - Q - T + 1.
+    // T has to be less than Q (check performed outside the circuit).
+    // If the previous condition (Q^2 - 2Q + 1 < p) is satisfied there is no risk of overflow during the scalar multiplication.
 
     // DEGREE ANALYSIS
-    // The degree of pk0_u is N - 1
-    // The degree of m_delta is N - 1
-    // The degree of pk0_u_plus_m_delta is N - 1
+    // let m_delta = poly_scalar_mul::<{ N - 1 }, F>(ctx, m, Constant(F::from(DELTA)), &gate);
+    // Note: m_delta is a polynomial in the R_q ring
+
+    // pk0_u + m_delta
+
+    // TO DO: Perform the polynomial addition between pk0_u and m_delta.
+    // TO DO: Reduce the coefficients by modulo `Q`
+    // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `N` => x^N + 1
+
+    // OVERFLOW ANALYSIS
+    // The coefficients of pk0_u and m_delta are in the [0, Q) range according to the constraints set above.
+    // The maximum value of the coffiecient of pk0_u_plus_m_delta is (Q-1) + (Q-1) = 2Q - 2.
+    // If the previous condition (Q^2 - 2Q + 1 < p) is satisfied there is no risk of overflow during the addition.
+
     // let pk0_u_plus_m_delta = poly_add::<N, F>(ctx, pk0_u, m_delta, &gate);
+    // Note: pk0_u_plus_m_delta is a polynomial in the R_q ring
 
-    // TO DO: perform pk0 * u + m * delta + e0 to get c0
+    // c0 = pk0_u_plus_m_delta + e0
+
+    // TO DO: Perform the polynomial addition between pk0_u_plus_m_delta and e0.
+    // TO DO: Reduce the coefficients by modulo `Q`
+    // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `N` => x^N + 1
 
     // OVERFLOW ANALYSIS
-    // The coefficients of pk0_u_plus_m_delta are in the [0, 2^2n+1) range according to the operations performed above (where n is the number of bits of Q)
-    // The coefficients of e0 are either [0, 1, Q-1] according to the check performed inside the circuit. The maximum value of a coefficient of e0 is n bits.
-    // If pk0_u_plus_m_delta has 2n+1 bits and e0 has n bits, the expansion rate of the coefficients of c0 is 2n + 1 + 1 bits.
-    // If n = 29 bits, the maximum expansion of the coefficients of c0 is 60 bits, which is below the prime field of the circuit (254 bits)
-    // No risk of coefficients overflowing the circuit prime field when adding pk0_u_plus_m_delta by e0
+    // The coefficients of pk0_u_plus_m_delta are in the [0, Q) range according to the constraints set above.
+    // The coefficients of e0 are in the range [0, b] OR [q-b, q-1] according to the constraints set above.
+    // The maximum value of the coffiecient of c0 is (Q-1) + (Q-1) = 2Q - 2.
+    // If the previous condition (Q^2 - 2Q + 1 < p) is satisfied there is no risk of overflow during the addition.
 
-    // DEGREE ANALYSIS
-    // The degree of pk0_u_plus_m_delta is N - 1
-    // The degree of e0 is N - 1
-    // The degree of c0 is N - 1
     // let c0 = poly_add::<N, F>(ctx, pk0_u_plus_m_delta, e0, &gate);
+    // Note: c0 is a polynomial in the R_q ring
 
-    // TO DO: reduce the cofficients of c0 by modulo `Q`
-    // TO DO: further reduce the coefficients of c0 by the cyclotomic polynomial of degree `N` => x^N + 1 (this second reduction might not be necessary, to check)
-    // As a result, c0 will be a polynomial inside the R_q ring
-
-    // COMPUTE C1
+    // 1. COMPUTE C1
 
     // pk1 * u
 
-    // OVERFLOW ANALYSIS
-    // The coefficients of pk1 are in the range [0, Q) according to the check to be performed outside the circuit. If Q has n bits, pk1 can have at most n bits.
-    // The coefficients of u are in the range [0, B] [Q-B, Q-1] according to check performed inside the circuit. If Q has n bits, u can have at most n bits.
-    // The expansion rate of the coefficients of pk1_u is 2n bits.
-    // If n = 29 bits, the maximum expansion of the coefficients of pk1_u is 58 bits, which is below the prime field of the circuit (254 bits)
-    // No risk of coefficients overflowing the circuit prime field when multiplying pk1 by u
-
-    // DEGREE ANALYSIS
-    // The degree of pk1 is N - 1
-    // The degree of u is N - 1
-    // The degree of pk1_u is N - 1 + N - 1 = 2N - 2
-    let pk1_u = poly_mul::<{ N - 1 }, F>(ctx, pk1, u, &gate);
-
-    // TO DO: reduce the coefficients of pk1_u by the cyclotomic polynomial of degree `N` => x^N + 1.
-    // By doing this, pk1_u will be reduced to a polynomial of degree `N - 1`
-
-    // TO DO: perform pk1 * u + e1 to get c1
+    // TO DO: Perform the polynomial multiplication between pk1 and u.
+    // TO DO: Reduce the resulting polynomial by the cyclotomic polynomial of degree `N` => x^N + 1
+    // TO DO: Further reduce the coefficients by modulo `Q`
 
     // OVERFLOW ANALYSIS
-    // The coefficients of pk1_u are in the [0, 2^2n) range according to the operations performed above (where n is the number of bits of Q)
-    // The coefficients of e1 are either [0, 1, Q-1] according to the check performed inside the circuit. The maximum value of a coefficient of e1 is n bits.
-    // If pk1_u has 2n bits and e0 has n bits, the expansion rate of the coefficients of c1 is 2n + 1 bits.
-    // If n = 29 bits, the maximum expansion of the coefficients of c0 is 59 bits, which is below the prime field of the circuit (254 bits)
-    // No risk of coefficients overflowing the circuit prime field when adding pk0_u_plus_m_delta by e0
+    // The coefficients of pk1 are in the range [0, Q) according to the check to be performed outside the circuit.
+    // The coefficients of u are either [0, 1, Q-1] according to the constraints set above.
+    // The maximum value of the coffiecient of pk0_u is (Q-1) * (Q-1) = Q^2 - 2Q + 1.
+    // If the previous condition (Q^2 - 2Q + 1 < p) is satisfied there is no risk of overflow during the multiplication.
 
-    // DEGREE ANALYSIS
-    // The degree of pk1_u is N - 1
-    // The degree of e1 is N - 1
-    // The degree of c1 is N - 1
+    // let pk1_u = poly_mul::<{ N - 1 }, F>(ctx, pk1, u.clone(), &gate);
+    // Note: pk1_u is a polynomial in the R_q ring
+
+    // TO DO: perform pk1_u + e1 to get c1
+
+    // TO DO: Perform the polynomial addition between pk1_u and e1.
+    // TO DO: Reduce the coefficients by modulo `Q`
+    // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `N` => x^N + 1
+
+    // OVERFLOW ANALYSIS
+    // The coefficients of pk1_u are in the [0, Q) range according to the constraints set above.
+    // The coefficients of e1 are in the range [0, b] OR [q-b, q-1] according to the constraints set above.
+    // The maximum value of the coffiecient of c1 is (Q-1) + (Q-1) = 2Q - 2.
+    // If the previous condition (Q^2 - 2Q + 1 < p) is satisfied there is no risk of overflow during the addition.
+
     // let c1 = poly_add::<N, F>(ctx, pk1_u, e1, &gate);
-
-    // TO DO: reduce the cofficients of c0 by modulo `Q`
-    // TO DO: further reduce the coefficients of c0 by the cyclotomic polynomial of degree `N` => x^N + 1
-    // As a result, c1 will be a polynomial inside the R_q ring
-
-    // TO DO: enforce computed c0 and c1 to be equal to the input c0 and c1
+    // Note: c1 is a polynomial in the R_q ring
 
     // TO DO: Expose to the public the coefficients of c0 and c1
     // TO DO: Expose to the public pk0 and pk1
     // TO DO: Expose to the public `cyclo`
+    
+    // TO DO: test that c0 and c1 computed inside the circuit are equal to the ciphertexts provided as input in the json file
 }
 
 fn main() {
