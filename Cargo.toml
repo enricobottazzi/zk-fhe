@@ -1,0 +1,16 @@
+[package]
+name = "zk-fhe"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", tag = "v0.3.0-ce" }
+halo2-scaffold = {git = "https://github.com/axiom-crypto/halo2-scaffold" }
+clap = { version = "=4.1", features = ["derive"] }
+serde = { version = "=1.0", default-features = false, features = ["derive"] }
+env_logger = "=0.10"
+rand = "0.8"
+
+
