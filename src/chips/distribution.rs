@@ -32,8 +32,9 @@ pub fn check_poly_from_distribution_chi_error<
     // The bool value of `in_range` is then enforced to be true
     let mut in_range_vec = Vec::with_capacity((N + 1) as usize);
 
-    // get the number of bits required to represent the modulus q
-    let q_bits = (Q as f64).log2().ceil() as usize;
+    // get the number of bits needed to represent the value of Q
+    let binary_representation = format!("{:b}", Q); // Convert to binary (base-2)
+    let q_bits = binary_representation.len();
 
     for coeff in &a {
         // Check for the range [0, B]
