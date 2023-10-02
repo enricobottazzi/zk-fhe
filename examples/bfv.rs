@@ -168,9 +168,7 @@ fn bfv_encryption_circuit<F: ScalarField>(
         - m must be a polynomial in the R_t ring => Coefficients must be in the [0, T) range and the degree of m must be N - 1
 
         Approach:
-        - `reduce_poly_mod` takes as input a polynomial and a modulus and returns the polynomial reduced by the modulus.
-        The constraint set is that the input polynomial is equal to the output polynomial meaning that the coefficients of the input polynomial
-        were already in the [0, T) range
+        - Perform a range check on the coefficients of m to be in the [0, T) range
         - The assignment for loop above guarantees that the degree of m is N - 1
     */
 
