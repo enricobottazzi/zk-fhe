@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use zk_fhe::chips::distribution::{
     check_poly_from_distribution_chi_error, check_poly_from_distribution_chi_key,
 };
-use zk_fhe::chips::poly_operations::{poly_add, poly_mul, poly_scalar_mul};
+use zk_fhe::chips::poly_operations::{poly_add, poly_mul_equal_deg, poly_scalar_mul};
 
 /// Circuit inputs for BFV encryption operations
 ///
@@ -162,7 +162,7 @@ fn bfv_encryption_circuit<F: ScalarField>(
         - The assignment for loop above guarantees that the degree of u is N - 1
     */
 
-    check_poly_from_distribution_chi_key::<{ N - 1 }, Q, F>(ctx, u, range.gate());
+    check_poly_from_distribution_chi_key::<{ N - 1 }, Q, F>(ctx, u.clone(), range.gate());
 
     /* Constraints on m
         - m must be a polynomial in the R_t ring => Coefficients must be in the [0, T) range and the degree of m must be N - 1
@@ -188,7 +188,7 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // The maximum value of the coffiecient of pk0_u is (Q-1) * (Q-1) = Q^2 - 2Q + 1.
     // Q needs to be chosen such that Q^2 - 2Q + 1 < p where p is the prime field of the circuit in order to avoid overflow during the multiplication.
 
-    // let pk0_u = poly_mul::<{ N - 1 }, F>(ctx, pk0, u.clone(), &gate);
+    let pk0_u = poly_mul_equal_deg::<{ N - 1 }, F>(ctx, pk0, u, &range.gate());
     // Note: pk0_u is a polynomial in the R_q ring
 
     // m * delta

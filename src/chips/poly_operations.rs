@@ -28,8 +28,9 @@ pub fn poly_add<const N: u64, F: ScalarField>(
 }
 
 /// Build the product of the polynomials a and b as dot product of the coefficients of a and b
-/// N is the degree of the polynomials
-pub fn poly_mul<const N: u64, F: ScalarField>(
+/// More efficient implementation for the case where the polynomials have the same degree
+/// N is the degree of the input polynomials
+pub fn poly_mul_equal_deg<const N: u64, F: ScalarField>(
     ctx: &mut Context<F>,
     a: Vec<AssignedValue<F>>,
     b: Vec<AssignedValue<F>>,
@@ -67,6 +68,46 @@ pub fn poly_mul<const N: u64, F: ScalarField>(
 
     // assert that the product polynomial has degree 2N
     assert_eq!(c.len() - 1, 2 * (N as usize));
+
+    c
+}
+
+/// Build the product of the polynomials a and b as dot product of the coefficients of a and b
+/// The polynomials have different degrees
+pub fn poly_mul_diff_deg<F: ScalarField>(
+    ctx: &mut Context<F>,
+    a: Vec<AssignedValue<F>>,
+    b: Vec<AssignedValue<F>>,
+    gate: &GateChip<F>,
+) -> Vec<AssignedValue<F>> {
+    let a_deg = a.len() - 1;
+    let b_deg = b.len() - 1;
+    let c_deg = a_deg + b_deg;
+
+    let mut c = vec![];
+
+    for i in 0..=c_deg {
+        let mut coefficient_accumaltor = vec![];
+
+        for j in 0..=i {
+            if j <= a_deg && (i - j) <= b_deg {
+                let a_coef = a[j];
+                let b_coef = b[i - j];
+
+                // Update the accumulator
+                coefficient_accumaltor.push(gate.mul(ctx, a_coef, b_coef));
+            }
+        }
+
+        let c_val = coefficient_accumaltor
+            .iter()
+            .fold(ctx.load_witness(F::zero()), |acc, x| gate.add(ctx, acc, *x));
+
+        c.push(c_val);
+    }
+
+    // assert that the product polynomial has degree c_deg
+    assert_eq!(c.len() - 1, c_deg);
 
     c
 }
