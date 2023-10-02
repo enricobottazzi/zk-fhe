@@ -12,7 +12,7 @@ use halo2_base::QuantumCell::Constant;
 use halo2_scaffold::scaffold::cmd::Cli;
 use halo2_scaffold::scaffold::run;
 use serde::{Deserialize, Serialize};
-use zk_fhe::chips::distribution::{
+use zk_fhe::chips::poly_distribution::{
     check_poly_from_distribution_chi_error, check_poly_from_distribution_chi_key,
 };
 use zk_fhe::chips::poly_operations::{poly_add, poly_mul_equal_deg, poly_scalar_mul};
