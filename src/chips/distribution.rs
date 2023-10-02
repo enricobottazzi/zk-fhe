@@ -33,17 +33,30 @@ pub fn check_poly_from_distribution_chi_error<
     let mut in_range_vec = Vec::with_capacity((N + 1) as usize);
 
     // get the number of bits needed to represent the value of Q
-    let binary_representation = format!("{:b}", Q); // Convert to binary (base-2)
+    let binary_representation = format!("{:b}", Q);
     let q_bits = binary_representation.len();
 
     for coeff in &a {
+        // First of all, enforce that coefficients are in the [0, 2^q_bits) range to satisfy the assumption of `is_less_than` chip
+        range.is_less_than_safe(ctx, *coeff, 1 << q_bits as u64);
+
         // Check for the range [0, B]
+        // coeff is known are known to have <= `q_bits` bits according to the constraint set above
+        // B + 1 is known to have <= `q_bits` bits as public constant
+        // Therefore it satisfies the assumption of `is_less_than` chip
         let in_partial_range_1 = range.is_less_than(ctx, *coeff, Constant(F::from(B + 1)), q_bits);
 
         // Check for the range [Q-B, Q-1]
+        // coeff is known are known to have <= `q_bits` bits according to the constraint set above
+        // Q - B is known to have <= `q_bits` bits as public constant
+        // Therefore it satisfies the assumption of `is_less_than` chip
         let not_in_range_lower_bound =
             range.is_less_than(ctx, *coeff, Constant(F::from(Q - B)), q_bits);
         let in_range_lower_bound = range.gate.not(ctx, not_in_range_lower_bound);
+
+        // coeff is known are known to have <= `q_bits` bits according to the constraint set above
+        // Q is known to have <= `q_bits` bits as public constant
+        // Therefore it satisfies the assumption of `is_less_than` chip
         let in_range_upper_bound = range.is_less_than(ctx, *coeff, Constant(F::from(Q)), q_bits);
         let in_partial_range_2 = range
             .gate
