@@ -13,6 +13,16 @@ pub fn div_euclid<const DEG_DVD: usize, const DEG_DVS: usize, const Q: u64>(
     if divisor.is_empty() || divisor.iter().all(|&x| x == 0) {
         panic!("Cannot divide by a zero polynomial!");
     }
+    if dividend.is_empty() || dividend.iter().all(|&x| x == 0) {
+        let quotient = vec![0; DEG_DVD - DEG_DVS + 1];
+        let remainder = vec![0; DEG_DVS];
+
+        // turn quotient and remainder into u64
+        let quotient = quotient.iter().map(|&x| x as u64).collect::<Vec<u64>>();
+        let remainder = remainder.iter().map(|&x| x as u64).collect::<Vec<u64>>();
+
+        return (quotient, remainder);
+    }
 
     // assert that the degree of the dividend is equal to DEG_DVD
     assert_eq!(dividend.len() - 1, DEG_DVD);
