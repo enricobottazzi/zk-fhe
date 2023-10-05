@@ -86,3 +86,34 @@ pub fn poly_scalar_mul<const N: u64, F: ScalarField>(
 
     c
 }
+
+// Takes a polynomial represented by its coefficients in a vector and output a new polynomial reduced by applying modulo Q
+// Q is the modulus
+// N is the degree of the polynomials
+fn poly_reduce<const Q; u64, const N: u64, F: ScalarField>(
+    ctx: &mut Context<F>,
+    input: Vec<AssignedValue<F>>,
+    range: &RangeChip<F>,
+) -> Vec<AssignedValue<F>> {
+
+	// Assert that degree is equal to the constant N
+    assert_eq!(input.len() - 1, N as usize);
+
+    // Assign the input polynomials to the circuit
+    let in_assigned: Vec<AssignedValue<F>> = input
+        .iter()
+        .map(|x| {
+            let result = F::from(*x as u64);
+            ctx.load_witness(result)})
+        .collect();
+
+    // Enforce that in_assigned[i] % Q = rem_assigned[i]
+    // coefficients of input polynomials are guaranteed to be at most 16 bits by assumption
+    let rem_assigned: Vec<AssignedValue<F>> =
+        in_assigned.iter().take(2 * N - 1).map(|&x| range.div_mod(ctx, x, Q, 16).1).collect();
+
+    // assert that the reduced polynomial has degree N
+    assert_eq!(rem_assigned.len() - 1, N as usize);
+
+    rem_assigned
+}
