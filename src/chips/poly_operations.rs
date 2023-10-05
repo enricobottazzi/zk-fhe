@@ -281,12 +281,18 @@ pub fn poly_divide_by_cyclo<
     // The coefficients of divisor are either 0, 1 by assumption.
 
     // We use a polynomial multiplication algorithm that does not require the input polynomials to be of the same degree
-
     let prod = poly_mul_diff_deg(ctx, quotient, divisor, range.gate());
 
-    // The coefficients of Divisor are either 0 or 1 given that this is a cyclotomic polynomial
+    // The coefficients of Divisor are in the range [0, Q - 1] by assumption.
     // The coefficients of Quotient are in the range [0, Q - 1] as per constraint set above.
-    // Therefore, the coefficients of prod are in the range [0, Q - 1]
+    // The coefficients of pk0_u are calcualted as $c_k = \sum_{i=0}^{k} pk0[i] * u[k - i]$. Where k is the index of the coefficient of pk0_u.
+    // The quotient is of degree DEG_DVD - DEG_DVS
+    // The divisor is of degree DEG_DVS
+    // The maximum number of multiplications in the sum is DEG_DVD + 1
+    // For that particular coefficient, the maximum value of the coffiecient of pk0_u is (Q-1) * (Q-1) * (DEG_DVD + 1).
+    // The maximum value of the coffiecient of pk0_u is (Q-1) * (Q-1) * (DEG_DVD + 1).
+    // Q needs to be chosen such that (Q-1) * (Q-1) * (DEG_DVD + 1) < p where p is the prime field of the circuit in order to avoid overflow during the multiplication.
+    // Therefore, the coefficients of prod are in the range [0, (Q-1) * (Q-1) * (DEG_DVD + 1)]
 
     // The degree of prod is DEG_DVD
     assert_eq!(prod.len() - 1, DEG_DVD);
@@ -298,7 +304,7 @@ pub fn poly_divide_by_cyclo<
     // prod + remainder
 
     // No risk of overflowing the circuit prime here when performing addition across coefficients
-    // The coefficients of prod are in the range [0, Q - 1] by the operation above.
+    // The coefficients of prod are in the range [0, (Q-1) * (Q-1) * (DEG_DVD + 1)] by the operation above.
     // The coefficients of remainder are in the range [0, Q - 1] by constraint set above.
 
     let sum = poly_add::<DEG_DVD, F>(ctx, prod, remainder.clone(), range.gate());
@@ -306,13 +312,13 @@ pub fn poly_divide_by_cyclo<
     // assert that the degree of sum is DEG_DVD
     assert_eq!(sum.len() - 1, DEG_DVD);
 
-    // The coefficients of prod are in the range [0, Q - 1]
+    // The coefficients of prod are in the range [0, (Q-1) * (Q-1) * (DEG_DVD + 1)]
     // The coefficients of remainder are in the range [0, Q - 1] by constraint set above.
-    // Therefore, the coefficients of sum are in the range [0, 2 * (Q - 1)].
+    // Therefore, the coefficients of sum are in the range [0, (Q-1) * (Q-1) * (DEG_DVD + 1) + Q - 1].
     // We can reduce the coefficients of sum modulo Q to make them in the range [0, Q - 1]
 
     // get the number of bits needed to represent the value of 2 * (Q - 1)
-    let binary_representation = format!("{:b}", (2 * (Q - 1))); // Convert to binary (base-2)
+    let binary_representation = format!("{:b}", (Q - 1) * (Q - 1) * ((DEG_DVD as u64) + 1) + Q - 1); // Convert to binary (base-2)
     let num_bits = binary_representation.len();
 
     let sum_mod = poly_reduce::<DEG_DVD, Q, F>(ctx, sum, range, num_bits);
