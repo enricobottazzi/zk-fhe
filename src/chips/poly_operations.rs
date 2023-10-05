@@ -124,19 +124,19 @@ pub fn poly_mul_diff_deg<F: ScalarField>(
 /// Build the scalar multiplication of the polynomials a and the scalar k as scalar multiplication of the coefficients of a and k
 /// DEG is the degree of the polynomial
 /// Input polynomial is parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
-pub fn poly_scalar_mul<const DEG: u64, F: ScalarField>(
+pub fn poly_scalar_mul<const DEG: usize, F: ScalarField>(
     ctx: &mut Context<F>,
     a: Vec<AssignedValue<F>>,
     b: QuantumCell<F>,
     gate: &GateChip<F>,
 ) -> Vec<AssignedValue<F>> {
     // assert that the degree of the polynomial a is equal to DEG
-    assert_eq!(a.len() - 1, DEG as usize);
+    assert_eq!(a.len() - 1, DEG);
 
     let c: Vec<AssignedValue<F>> = a.iter().map(|&a| gate.mul(ctx, a, b)).collect();
 
     // assert that the product polynomial has degree DEG
-    assert_eq!(c.len() - 1, DEG as usize);
+    assert_eq!(c.len() - 1, DEG);
 
     c
 }
