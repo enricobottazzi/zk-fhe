@@ -157,7 +157,7 @@ pub fn poly_reduce<const DEG: usize, const Q: u64, F: ScalarField>(
     // Enforce that in_assigned[i] % Q = rem_assigned[i]
     let rem_assigned: Vec<AssignedValue<F>> = input
         .iter()
-        .take(2 * (DEG) - 1)
+        .take(2 * DEG - 1)
         .map(|&x| range.div_mod(ctx, x, Q, num_bits).1)
         .collect();
 
