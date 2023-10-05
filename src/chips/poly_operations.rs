@@ -38,7 +38,7 @@ pub fn poly_add<const DEG: usize, F: ScalarField>(
 /// Compared to `poly_mul_diff_deg`, this function assumes that the polynomials have the same degree and therefore optimizes the computation
 /// DEG is the degree of the input polynomials
 /// Input polynomials are parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
-pub fn poly_mul_equal_deg<const DEG: u64, F: ScalarField>(
+pub fn poly_mul_equal_deg<const DEG: usize, F: ScalarField>(
     ctx: &mut Context<F>,
     a: Vec<AssignedValue<F>>,
     b: Vec<AssignedValue<F>>,
@@ -46,7 +46,7 @@ pub fn poly_mul_equal_deg<const DEG: u64, F: ScalarField>(
 ) -> Vec<AssignedValue<F>> {
     // assert that the input polynomials have the same degree and this is equal to DEG
     assert_eq!(a.len() - 1, b.len() - 1);
-    assert_eq!(a.len() - 1, DEG as usize);
+    assert_eq!(a.len() - 1, DEG);
 
     let mut c = vec![];
 
@@ -55,14 +55,14 @@ pub fn poly_mul_equal_deg<const DEG: u64, F: ScalarField>(
 
         if i < (DEG + 1) {
             for a_idx in 0..=i {
-                let a_coef = a[a_idx as usize];
-                let b_coef = b[(i - a_idx) as usize];
+                let a_coef = a[a_idx];
+                let b_coef = b[(i - a_idx)];
                 coefficient_accumaltor.push(gate.mul(ctx, a_coef, b_coef));
             }
         } else {
             for a_idx in (i - DEG)..=DEG {
-                let a_coef = a[a_idx as usize];
-                let b_coef = b[(i - a_idx) as usize];
+                let a_coef = a[a_idx];
+                let b_coef = b[(i - a_idx)];
                 coefficient_accumaltor.push(gate.mul(ctx, a_coef, b_coef));
             }
         }
@@ -75,7 +75,7 @@ pub fn poly_mul_equal_deg<const DEG: u64, F: ScalarField>(
     }
 
     // assert that the product polynomial has degree 2*DEG
-    assert_eq!(c.len() - 1, 2 * (DEG as usize));
+    assert_eq!(c.len() - 1, 2 * DEG);
 
     c
 }
@@ -145,7 +145,7 @@ pub fn poly_scalar_mul<const DEG: u64, F: ScalarField>(
 /// DEG is the degree of the polynomial
 /// Input polynomial is parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
 /// It assumes that the coefficients of the input polynomial can be expressed in at most num_bits bits
-pub fn poly_reduce<const Q: u64, const DEG: usize, F: ScalarField>(
+pub fn poly_reduce<const DEG: usize, const Q: u64, F: ScalarField>(
     ctx: &mut Context<F>,
     input: Vec<AssignedValue<F>>,
     range: &RangeChip<F>,
@@ -200,7 +200,8 @@ pub fn poly_divide_by_cyclo<
     let dividend_to_u64 = vec_assigned_to_vec_u64(&dividend);
     let divisor_to_u64 = vec_assigned_to_vec_u64(&divisor);
 
-    let (quotient_to_u64, remainder_to_u64) = div_euclid::<Q>(&dividend_to_u64, &divisor_to_u64);
+    let (quotient_to_u64, remainder_to_u64) =
+        div_euclid::<DEG_DVD, DEG_DVS, Q>(&dividend_to_u64, &divisor_to_u64);
 
     // After the division, the degree of the quotient should be equal to DEG_DVD - DEG_DVS
     assert_eq!(quotient_to_u64.len() - 1, DEG_DVD - DEG_DVS);
@@ -217,6 +218,16 @@ pub fn poly_divide_by_cyclo<
     // Now remainder must be of degree DEG_DVS - 1
     assert_eq!(remainder_to_u64.len() - 1, DEG_DVS - 1);
 
+    // Later we need to perform the operation remainder + prod where prod is of degree DEG_DVD
+    // In order to perform the operation inside the circuit we need to pad the remainder with 0s at the beginning to make its degree equal to DEG_DVD
+    let mut remainder_to_u64 = remainder_to_u64;
+    while remainder_to_u64.len() - 1 < DEG_DVD {
+        remainder_to_u64.insert(0, 0);
+    }
+
+    // Now remainder must be of degree DEG_DVD
+    assert_eq!(remainder_to_u64.len() - 1, DEG_DVD);
+
     // Assign the quotient and remainder to the circuit
     let mut quotient = vec![];
     let mut remainder = vec![];
@@ -227,7 +238,7 @@ pub fn poly_divide_by_cyclo<
         quotient.push(assigned_val);
     }
 
-    for i in 0..DEG_DVS {
+    for i in 0..DEG_DVD + 1 {
         let val = F::from(remainder_to_u64[i]);
         let assigned_val = ctx.load_witness(val);
         remainder.push(assigned_val);
@@ -284,15 +295,6 @@ pub fn poly_divide_by_cyclo<
     // The degree of prod is DEG_DVD
     // The degree of remainder is DEG_DVS - 1
 
-    // We can pad the remainder with 0s to make its degree equal to DEG_DVD
-    let mut remainder = remainder;
-    while remainder.len() - 1 < DEG_DVD {
-        remainder.push(ctx.load_witness(F::zero()));
-    }
-
-    // Now remainder is of degree DEG_DVD
-    assert_eq!(remainder.len() - 1, DEG_DVD);
-
     // prod + remainder
 
     // No risk of overflowing the circuit prime here when performing addition across coefficients
@@ -313,7 +315,7 @@ pub fn poly_divide_by_cyclo<
     let binary_representation = format!("{:b}", (2 * (Q - 1))); // Convert to binary (base-2)
     let num_bits = binary_representation.len();
 
-    let sum_mod = poly_reduce::<Q, DEG_DVD, F>(ctx, sum, range, num_bits);
+    let sum_mod = poly_reduce::<DEG_DVD, Q, F>(ctx, sum, range, num_bits);
 
     // assert that the degree of sum_mod is DEG_DVD
     assert_eq!(sum_mod.len() - 1, DEG_DVD);

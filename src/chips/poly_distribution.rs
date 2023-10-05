@@ -11,7 +11,7 @@ use halo2_base::QuantumCell::Constant;
 /// Namely, that the coefficients are in the range [0, B] OR [Q-B, Q-1]
 /// DEG is the degree of the polynomial
 pub fn check_poly_from_distribution_chi_error<
-    const DEG: u64,
+    const DEG: usize,
     const Q: u64,
     const B: u64,
     F: ScalarField,
@@ -21,7 +21,7 @@ pub fn check_poly_from_distribution_chi_error<
     range: &RangeChip<F>,
 ) {
     // assert that the degree of the polynomial a is equal to DEG
-    assert_eq!(a.len() - 1, DEG as usize);
+    assert_eq!(a.len() - 1, DEG);
 
     // The goal is to check that coeff is in the range [0, B] OR [Q-B, Q-1]
     // We split this check into two checks:
@@ -30,7 +30,7 @@ pub fn check_poly_from_distribution_chi_error<
     // We then perform (`in_partial_range_1` OR `in_partial_range_2`) to check that coeff is in the range [0, B] OR [Q-B, Q-1]
     // The result of this check is stored in the `in_range` vector.
     // The bool value of `in_range` is then enforced to be true
-    let mut in_range_vec = Vec::with_capacity((DEG + 1) as usize);
+    let mut in_range_vec = Vec::with_capacity((DEG + 1));
 
     // get the number of bits needed to represent the value of Q
     let binary_representation = format!("{:b}", Q);
@@ -77,13 +77,13 @@ pub fn check_poly_from_distribution_chi_error<
 /// Enforce that polynomial a of degree DEG is sampled from the distribution chi key
 /// Namely, that the coefficients are in the range [0, 1, Q-1].
 /// DEG is the degree of the polynomial
-pub fn check_poly_from_distribution_chi_key<const DEG: u64, const Q: u64, F: ScalarField>(
+pub fn check_poly_from_distribution_chi_key<const DEG: usize, const Q: u64, F: ScalarField>(
     ctx: &mut Context<F>,
     a: Vec<AssignedValue<F>>,
     gate: &GateChip<F>,
 ) {
     // assert that the degree of the polynomial a is equal to DEG
-    assert_eq!(a.len() - 1, DEG as usize);
+    assert_eq!(a.len() - 1, DEG);
 
     // In order to check that coeff is equal to either 0, 1 or q-1
     // The constraint that we want to enforce is:
