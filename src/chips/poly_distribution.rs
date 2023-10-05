@@ -30,7 +30,7 @@ pub fn check_poly_from_distribution_chi_error<
     // We then perform (`in_partial_range_1` OR `in_partial_range_2`) to check that coeff is in the range [0, B] OR [Q-B, Q-1]
     // The result of this check is stored in the `in_range` vector.
     // The bool value of `in_range` is then enforced to be true
-    let mut in_range_vec = Vec::with_capacity((DEG + 1));
+    let mut in_range_vec = Vec::with_capacity(DEG + 1);
 
     // get the number of bits needed to represent the value of Q
     let binary_representation = format!("{:b}", Q);

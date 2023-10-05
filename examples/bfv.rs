@@ -21,7 +21,7 @@ use zk_fhe::chips::poly_operations::{poly_add, poly_mul_equal_deg, poly_scalar_m
 ///
 /// # Type Parameters
 ///
-/// * `N`: Degree of the cyclotomic polynomial `cyclo` of the polynomial ring R_q.
+/// * `DEG`: Degree of the cyclotomic polynomial `cyclo` of the polynomial ring R_q.
 /// * `Q`: Modulus of the cipher text field
 /// * `T`: Modulus of the plaintext field
 /// * `DELTA` : Q/T rounded to the lower integer
@@ -29,36 +29,36 @@ use zk_fhe::chips::poly_operations::{poly_add, poly_mul_equal_deg, poly_scalar_m
 ///
 /// # Fields
 ///
-/// * `pk0`: Public key 0 polynomial coefficients of degree N-1 [a_N-1, a_N-2, ..., a_1, a_0] where a_0 is the constant term
-/// * `pk1`: Public key 1 polynomial coefficients of degree N-1 [a_N-1, a_N-2, ..., a_1, a_0] where a_0 is the constant term
-/// * `m`: Plaintext polynomial of degree N-1 [a_N-1, a_N-2, ..., a_1, a_0] where a_0 is the constant term. Represents the message to be encrypted
+/// * `pk0`: Public key 0 polynomial coefficients of degree DEG-1 [a_N-1, a_N-2, ..., a_1, a_0] where a_0 is the constant term
+/// * `pk1`: Public key 1 polynomial coefficients of degree DEG-1 [a_N-1, a_N-2, ..., a_1, a_0] where a_0 is the constant term
+/// * `m`: Plaintext polynomial of degree DEG-1 [a_N-1, a_N-2, ..., a_1, a_0] where a_0 is the constant term. Represents the message to be encrypted
 /// * `u`: Ephemeral key polynomial coefficients from the distribution ChiKey [a_N-1, a_N-2, ..., a_1, a_0]
 /// * `e0`: Error polynomial coefficients from the distribution ChiError [a_N-1, a_N-2, ..., a_1, a_0]
 /// * `e1`: Error polynomial coefficients from the distribution ChiError [a_N-1, a_N-2, ..., a_1, a_0]
 
 ///
 /// # Assumes that the following checks have been performed outside the circuit
-/// - `N` must be a power of 2
+/// - `DEG` must be a power of 2
 /// - `Q` must be a prime number
 /// - `Q` must be greater than 1.
 /// -  If n is the number of bits of Q, and m is the number of bits of the prime field of the circuit. n must be set such that (n * 2) + 2 < m to avoid overflow of the coefficients of the polynomials
 /// - `T` must be a prime number and must be greater than 1 and less than `Q`
 /// - `B` must be a positive integer
-/// - `pk0` and `pk1` must be polynomials in the R_q ring. The ring R_q is defined as R_q = Z_q[x]/(x^N + 1)
-/// - `cyclo` must be the cyclotomic polynomial of degree `N` => x^N + 1
+/// - `pk0` and `pk1` must be polynomials in the R_q ring. The ring R_q is defined as R_q = Z_q[x]/(x^DEG + 1)
+/// - `cyclo` must be the cyclotomic polynomial of degree `DEG` => x^DEG + 1
 
-// N and Q Parameters of the BFV encryption scheme chosen according to TABLES of RECOMMENDED PARAMETERS for 128-bits security level
+// DEG and Q Parameters of the BFV encryption scheme chosen according to TABLES of RECOMMENDED PARAMETERS for 128-bits security level
 // https://homomorphicencryption.org/wp-content/uploads/2018/11/HomomorphicEncryptionStandardv1.1.pdf
 // B is the upper bound of the distribution Chi Error. We pick standard deviation 𝜎 ≈ 3.2 according to the HomomorphicEncryptionStandardv1 paper.
 // T has been picked according to Lattigo (https://github.com/tuneinsight/lattigo/blob/master/bfv/params.go) implementation
 // As suggest by https://eprint.iacr.org/2021/204.pdf (paragraph 2) we take B = 6σerr
-const N: u64 = 1024;
+const DEG: usize = 1024;
 const Q: u64 = (1 << 29) - 3;
 const T: u64 = 65537;
 const B: u64 = 18;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CircuitInput<const N: u64, const Q: u64, const T: u64, const B: u64> {
+pub struct CircuitInput<const DEG: usize, const Q: u64, const T: u64, const B: u64> {
     pub pk0: Vec<u64>, // polynomial coefficients [a_N-1, a_N-2, ..., a_1, a_0] where a_0 is the constant term. Should live in R_q (to be checked outside the circuit)
     pub pk1: Vec<u64>, // polynomial coefficients [a_N-1, a_N-2, ..., a_1, a_0] where a_0 is the constant term. Should live in R_q (to be checked outside the circuit)
     pub m: Vec<u64>, // polynomial coefficients [a_N-1, a_N-2, ..., a_1, a_0] where a_0 is the constant term. Should in R_t (checked inside the circuit)
@@ -71,18 +71,18 @@ pub struct CircuitInput<const N: u64, const Q: u64, const T: u64, const B: u64> 
 
 fn bfv_encryption_circuit<F: ScalarField>(
     ctx: &mut Context<F>,
-    input: CircuitInput<N, Q, T, B>,
+    input: CircuitInput<DEG, Q, T, B>,
     make_public: &mut Vec<AssignedValue<F>>,
 ) {
-    // assert that the input polynomials have the same degree and this is equal to N - 1
-    assert_eq!(input.pk0.len(), N as usize);
-    assert_eq!(input.pk1.len(), N as usize);
-    assert_eq!(input.m.len(), N as usize);
-    assert_eq!(input.u.len(), N as usize);
-    assert_eq!(input.e0.len(), N as usize);
-    assert_eq!(input.e1.len(), N as usize);
-    assert_eq!(input.c0.len(), N as usize);
-    assert_eq!(input.c1.len(), N as usize);
+    // assert that the input polynomials have the same degree and this is equal to DEG - 1
+    assert_eq!(input.pk0.len(), DEG);
+    assert_eq!(input.pk1.len(), DEG);
+    assert_eq!(input.m.len(), DEG);
+    assert_eq!(input.u.len(), DEG);
+    assert_eq!(input.e0.len(), DEG);
+    assert_eq!(input.e1.len(), DEG);
+    assert_eq!(input.c0.len(), DEG);
+    assert_eq!(input.c1.len(), DEG);
 
     let mut pk0 = vec![];
     let mut pk1 = vec![];
@@ -92,8 +92,8 @@ fn bfv_encryption_circuit<F: ScalarField>(
     let mut e1 = vec![];
 
     // Assign the input polynomials to the circuit
-    // Using a for loop from 0 to N - 1 enforces that the assigned input polynomials have the same degree and this is equal to N - 1
-    for i in 0..N as usize {
+    // Using a for loop from 0 to DEG - 1 enforces that the assigned input polynomials have the same degree and this is equal to DEG - 1
+    for i in 0..DEG as usize {
         let pk0_val = F::from(input.pk0[i]);
         let pk1_val = F::from(input.pk1[i]);
         let u_val = F::from(input.u[i]);
@@ -116,12 +116,12 @@ fn bfv_encryption_circuit<F: ScalarField>(
         e1.push(e1_assigned_value);
     }
 
-    assert!(pk0.len() == N as usize);
-    assert!(pk1.len() == N as usize);
-    assert!(u.len() == N as usize);
-    assert!(m.len() == N as usize);
-    assert!(e0.len() == N as usize);
-    assert!(e1.len() == N as usize);
+    assert!(pk0.len() == DEG);
+    assert!(pk1.len() == DEG);
+    assert!(u.len() == DEG);
+    assert!(m.len() == DEG);
+    assert!(e0.len() == DEG);
+    assert!(e1.len() == DEG);
 
     const DELTA: u64 = Q / T; // Q/T rounded to the lower integer
 
@@ -136,40 +136,40 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // TO DO: Assign cyclotomic polynomial `cyclo` to the circuit
 
     /* Constraints on e0
-        - e0 must be a polynomial in the R_q ring => Coefficients must be in the [0, Q) range and the degree of e0 must be N - 1
+        - e0 must be a polynomial in the R_q ring => Coefficients must be in the [0, Q) range and the degree of e0 must be DEG - 1
         - e0 must be sampled from the distribution ChiError
 
         Approach:
         - `check_poly_from_distribution_chi_error` chip guarantees that the coefficients of e0 are in the range [0, b] OR [q-b, q-1]
         - As this range is a subset of the [0, Q) range, the coefficients of e0 are in the [0, Q) range
-        - The assignment for loop above guarantees that the degree of e0 is N - 1
+        - The assignment for loop above guarantees that the degree of e0 is DEG - 1
     */
 
     /* Constraints on e1
         Same as e0
     */
 
-    check_poly_from_distribution_chi_error::<{ N - 1 }, Q, B, F>(ctx, e0, &range);
-    check_poly_from_distribution_chi_error::<{ N - 1 }, Q, B, F>(ctx, e1, &range);
+    check_poly_from_distribution_chi_error::<{ DEG - 1 }, Q, B, F>(ctx, e0, &range);
+    check_poly_from_distribution_chi_error::<{ DEG - 1 }, Q, B, F>(ctx, e1, &range);
 
     /* Constraints on u
-        - u must be a polynomial in the R_q ring => Coefficients must be in the [0, Q) range and the degree of u must be N - 1
+        - u must be a polynomial in the R_q ring => Coefficients must be in the [0, Q) range and the degree of u must be DEG - 1
         - u must be sampled from the distribution ChiKey
 
         Approach:
         - `check_poly_from_distribution_chi_key` chip guarantees that the coefficients of u are in the range [0, 1, Q-1]
         - As this range is a subset of the [0, Q) range, the coefficients of u are in the [0, Q) range
-        - The assignment for loop above guarantees that the degree of u is N - 1
+        - The assignment for loop above guarantees that the degree of u is DEG - 1
     */
 
-    check_poly_from_distribution_chi_key::<{ N - 1 }, Q, F>(ctx, u.clone(), range.gate());
+    check_poly_from_distribution_chi_key::<{ DEG - 1 }, Q, F>(ctx, u.clone(), range.gate());
 
     /* Constraints on m
-        - m must be a polynomial in the R_t ring => Coefficients must be in the [0, T) range and the degree of m must be N - 1
+        - m must be a polynomial in the R_t ring => Coefficients must be in the [0, T) range and the degree of m must be DEG - 1
 
         Approach:
         - Perform a range check on the coefficients of m to be in the [0, T) range
-        - The assignment for loop above guarantees that the degree of m is N - 1
+        - The assignment for loop above guarantees that the degree of m is DEG - 1
     */
 
     // 1. COMPUTE C0
@@ -177,7 +177,7 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // pk0 * u
 
     // TO DO: Perform the polynomial multiplication between pk0 and u.
-    // TO DO: Reduce the resulting polynomial by the cyclotomic polynomial of degree `N` => x^N + 1
+    // TO DO: Reduce the resulting polynomial by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
     // TO DO: Further reduce the coefficients by modulo `Q`
 
     // OVERFLOW ANALYSIS
@@ -186,14 +186,14 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // The maximum value of the coffiecient of pk0_u is (Q-1) * (Q-1) = Q^2 - 2Q + 1.
     // Q needs to be chosen such that Q^2 - 2Q + 1 < p where p is the prime field of the circuit in order to avoid overflow during the multiplication.
 
-    let pk0_u = poly_mul_equal_deg::<{ N - 1 }, F>(ctx, pk0, u, &range.gate());
+    let pk0_u = poly_mul_equal_deg::<{ DEG - 1 }, F>(ctx, pk0, u, &range.gate());
     // Note: pk0_u is a polynomial in the R_q ring
 
     // m * delta
 
     // TO DO: Perform the polynomial scalar multiplication between m and delta.
     // TO DO: Reduce the coefficients by modulo `Q`
-    // Note: Scalar multiplication does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `N` => x^N + 1
+    // Note: Scalar multiplication does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
 
     // OVERFLOW ANALYSIS
     // The coefficients of m are in the range [0, T) according to the constaints set above.
@@ -203,28 +203,28 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // If the previous condition (Q^2 - 2Q + 1 < p) is satisfied there is no risk of overflow during the scalar multiplication.
 
     // DEGREE ANALYSIS
-    // let m_delta = poly_scalar_mul::<{ N - 1 }, F>(ctx, m, Constant(F::from(DELTA)), &gate);
+    // let m_delta = poly_scalar_mul::<{ DEG - 1 }, F>(ctx, m, Constant(F::from(DELTA)), &gate);
     // Note: m_delta is a polynomial in the R_q ring
 
     // pk0_u + m_delta
 
     // TO DO: Perform the polynomial addition between pk0_u and m_delta.
     // TO DO: Reduce the coefficients by modulo `Q`
-    // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `N` => x^N + 1
+    // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
 
     // OVERFLOW ANALYSIS
     // The coefficients of pk0_u and m_delta are in the [0, Q) range according to the constraints set above.
     // The maximum value of the coffiecient of pk0_u_plus_m_delta is (Q-1) + (Q-1) = 2Q - 2.
     // If the previous condition (Q^2 - 2Q + 1 < p) is satisfied there is no risk of overflow during the addition.
 
-    // let pk0_u_plus_m_delta = poly_add::<N, F>(ctx, pk0_u, m_delta, &gate);
+    // let pk0_u_plus_m_delta = poly_add::<DEG, F>(ctx, pk0_u, m_delta, &gate);
     // Note: pk0_u_plus_m_delta is a polynomial in the R_q ring
 
     // c0 = pk0_u_plus_m_delta + e0
 
     // TO DO: Perform the polynomial addition between pk0_u_plus_m_delta and e0.
     // TO DO: Reduce the coefficients by modulo `Q`
-    // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `N` => x^N + 1
+    // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
 
     // OVERFLOW ANALYSIS
     // The coefficients of pk0_u_plus_m_delta are in the [0, Q) range according to the constraints set above.
@@ -232,7 +232,7 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // The maximum value of the coffiecient of c0 is (Q-1) + (Q-1) = 2Q - 2.
     // If the previous condition (Q^2 - 2Q + 1 < p) is satisfied there is no risk of overflow during the addition.
 
-    // let c0 = poly_add::<N, F>(ctx, pk0_u_plus_m_delta, e0, &gate);
+    // let c0 = poly_add::<DEG, F>(ctx, pk0_u_plus_m_delta, e0, &gate);
     // Note: c0 is a polynomial in the R_q ring
 
     // 1. COMPUTE C1
@@ -240,7 +240,7 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // pk1 * u
 
     // TO DO: Perform the polynomial multiplication between pk1 and u.
-    // TO DO: Reduce the resulting polynomial by the cyclotomic polynomial of degree `N` => x^N + 1
+    // TO DO: Reduce the resulting polynomial by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
     // TO DO: Further reduce the coefficients by modulo `Q`
 
     // OVERFLOW ANALYSIS
@@ -249,14 +249,14 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // The maximum value of the coffiecient of pk0_u is (Q-1) * (Q-1) = Q^2 - 2Q + 1.
     // If the previous condition (Q^2 - 2Q + 1 < p) is satisfied there is no risk of overflow during the multiplication.
 
-    // let pk1_u = poly_mul::<{ N - 1 }, F>(ctx, pk1, u.clone(), &gate);
+    // let pk1_u = poly_mul::<{ DEG - 1 }, F>(ctx, pk1, u.clone(), &gate);
     // Note: pk1_u is a polynomial in the R_q ring
 
     // TO DO: perform pk1_u + e1 to get c1
 
     // TO DO: Perform the polynomial addition between pk1_u and e1.
     // TO DO: Reduce the coefficients by modulo `Q`
-    // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `N` => x^N + 1
+    // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
 
     // OVERFLOW ANALYSIS
     // The coefficients of pk1_u are in the [0, Q) range according to the constraints set above.
@@ -264,7 +264,7 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // The maximum value of the coffiecient of c1 is (Q-1) + (Q-1) = 2Q - 2.
     // If the previous condition (Q^2 - 2Q + 1 < p) is satisfied there is no risk of overflow during the addition.
 
-    // let c1 = poly_add::<N, F>(ctx, pk1_u, e1, &gate);
+    // let c1 = poly_add::<DEG, F>(ctx, pk1_u, e1, &gate);
     // Note: c1 is a polynomial in the R_q ring
 
     // TO DO: Expose to the public the coefficients of c0 and c1
