@@ -183,12 +183,14 @@ fn bfv_encryption_circuit<F: ScalarField>(
     check_poly_from_distribution_chi_key::<{ DEG - 1 }, Q, F>(ctx, u.clone(), range.gate());
 
     /* Constraints on m
-        - m must be a polynomial in the R_t ring => Coefficients must be in the [0, T) range and the degree of m must be DEG - 1
+        - m must be a polynomial in the R_t ring => Coefficients must be in the [0, T/2] OR [Q - T/2, Q - 1] range and the degree of m must be DEG - 1
 
         Approach:
-        - Perform a range check on the coefficients of m to be in the [0, T) range
+        - Perform a range check on the coefficients of m to be in the [0, T/2] OR [Q - T/2, Q - 1] range
         - The assignment for loop above guarantees that the degree of m is DEG - 1
     */
+
+    // TO DO: apply constraint on the coefficients of m!
 
     // 1. COMPUTE C0
 
@@ -242,21 +244,18 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // Perform the polynomial scalar multiplication between m and delta.
 
     // OVERFLOW ANALYSIS
-    // The coefficients of m are in the range [0, T) according to the constaints set above.
+    // The coefficients of m are in the range [0, T/2] OR [Q - T/2, Q - 1] according to the constaints set above.
     // Delta is a constant in the range [0, Q) as it is defined as Q/T rounded to the lower integer and T < Q and T > 1.
-    // The maximum value of the coffiecient of m_delta is (Q-1) * (T-1) = QT - Q - T + 1.
+    // The maximum value of the coffiecient of m_delta is (Q-1) * (Q-1) = Q^2 - 2Q + 1.
     // T has to be less than Q (check performed outside the circuit).
     // If the previous condition (Q^2 - 2Q + 1 < p) is satisfied there is no risk of overflow during the scalar multiplication.
 
-    let m_delta = poly_scalar_mul::<{ DEG - 1 }, F>(ctx, m, Constant(F::from(DELTA)), range.gate());
-
-    // get the number of bits needed to represent the value of QT - Q - T + 1.
-    let binary_representation = format!("{:b}", (Q * T) - Q - T + 1);
-    let num_bits_2 = binary_representation.len();
+    let m_delta =
+        poly_scalar_mul::<{ DEG - 1 }, F>(ctx, m.clone(), Constant(F::from(DELTA)), range.gate());
 
     // Reduce the coefficients of `m_delta` by modulo `Q`
     // Note: Scalar multiplication does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
-    let m_delta = poly_reduce::<{ DEG - 1 }, Q, F>(ctx, m_delta, &range, num_bits_2);
+    let m_delta = poly_reduce::<{ DEG - 1 }, Q, F>(ctx, m_delta, &range, num_bits_1);
     // m_delta is a polynomial in the R_q ring
 
     // pk0_u_trimmed + m_delta
@@ -292,11 +291,11 @@ fn bfv_encryption_circuit<F: ScalarField>(
 
     // get the number of bits needed to represent the value of 2Q - 2.
     let binary_representation = format!("{:b}", 2 * Q - 2);
-    let num_bits_3 = binary_representation.len();
+    let num_bits_2 = binary_representation.len();
 
     // Reduce the coefficients by modulo `Q`
     // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
-    let c0 = poly_reduce::<{ DEG - 1 }, Q, F>(ctx, c0, &range, num_bits_3);
+    let c0 = poly_reduce::<{ DEG - 1 }, Q, F>(ctx, c0, &range, num_bits_2);
 
     // c0 is a polynomial in the R_q ring
 
@@ -353,7 +352,7 @@ fn bfv_encryption_circuit<F: ScalarField>(
     let c1 = poly_add::<{ DEG - 1 }, F>(ctx, pk1_u_trimmed, e1, range.gate());
 
     // Reduce the coefficients by modulo `Q`
-    let c1 = poly_reduce::<{ DEG - 1 }, Q, F>(ctx, c1, &range, num_bits_3);
+    let c1 = poly_reduce::<{ DEG - 1 }, Q, F>(ctx, c1, &range, num_bits_2);
 
     // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
 
@@ -362,7 +361,7 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // That that c0 and c1 computed inside the circuit are equal to the ciphertexts provided as input in the test vector json file
     // Check outside the circuit that the remainder matches the expected one
     for i in 0..DEG {
-        // assert_eq!(*c0[i].value(), F::from(input.c0[i]));
+        assert_eq!(*c0[i].value(), F::from(input.c0[i]));
         assert_eq!(*c1[i].value(), F::from(input.c1[i]));
     }
 
