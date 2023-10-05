@@ -201,17 +201,21 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // OVERFLOW ANALYSIS
     // The coefficients of pk0 are in the range [0, Q) according to the check to be performed outside the circuit.
     // The coefficients of u are either [0, 1, Q-1] according to the constraints set above.
-    // The maximum value of the coffiecient of pk0_u is (Q-1) * (Q-1) = Q^2 - 2Q + 1.
-    // Q needs to be chosen such that Q^2 - 2Q + 1 < p where p is the prime field of the circuit in order to avoid overflow during the multiplication.
+    // The coefficients of pk0_u are calcualted as $c_k = \sum_{i=0}^{k} pk0[i] * u[k - i]$. Where k is the index of the coefficient of pk0_u.
+    // Given that the input polynomials are of degree DEG - 1, the maximum number of multiplications in the sum is for k = DEG - 1.
+    // In that case there are DEG multiplications in the sum.
+    // For that particular coefficient, the maximum value of the coffiecient of pk0_u is (Q-1) * (Q-1) * DEG.
+    // The maximum value of the coffiecient of pk0_u is  (Q-1) * (Q-1) * DEG.
+    // Q needs to be chosen such that  (Q-1) * (Q-1) * DEG < p where p is the prime field of the circuit in order to avoid overflow during the multiplication.
 
     let pk0_u = poly_mul_equal_deg::<{ DEG - 1 }, F>(ctx, pk0.clone(), u.clone(), &range.gate());
 
     // pk0_u is a polynomial of degree (DEG - 1) * 2 = 2*DEG - 2
-    // pk0_u has coefficients in the [0, Q^2 - 2Q + 1] range
+    // pk0_u has coefficients in the [0, (Q-1) * (Q-1) * DEG] range
     // Reduce the coefficients by modulo `Q`
 
-    // get the number of bits needed to represent the value of Q^2 - 2Q + 1
-    let binary_representation = format!("{:b}", (Q.pow(2) - (2 * Q) + 1));
+    // get the number of bits needed to represent the value of (Q-1) * (Q-1) * DEG
+    let binary_representation = format!("{:b}", ((Q - 1) * (Q - 1) * (DEG as u64)));
     let num_bits_1 = binary_representation.len();
 
     let pk0_u = poly_reduce::<{ 2 * DEG - 2 }, Q, F>(ctx, pk0_u, &range, num_bits_1);
@@ -308,14 +312,17 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // OVERFLOW ANALYSIS
     // The coefficients of pk1 are in the range [0, Q) according to the check to be performed outside the circuit.
     // The coefficients of u are either [0, 1, Q-1] according to the constraints set above.
-    // The maximum value of the coffiecient of pk1_u is (Q-1) * (Q-1) = Q^2 - 2Q + 1.
-    // If the previous condition (Q^2 - 2Q + 1 < p) is satisfied there is no risk of overflow during the multiplication.
-
+    // The coefficients of pk1_u are calcualted as $c_k = \sum_{i=0}^{k} pk1[i] * u[k - i]$. Where k is the index of the coefficient of pk1_u.
+    // Given that the input polynomials are of degree DEG - 1, the maximum number of multiplications in the sum is for k = DEG - 1.
+    // In that case there are DEG multiplications in the sum.
+    // For that particular coefficient, the maximum value of the coffiecient of pk1_u is (Q-1) * (Q-1) * DEG.
+    // The maximum value of the coffiecient of pk1_u is  (Q-1) * (Q-1) * DEG.
+    // Q needs to be chosen such that  (Q-1) * (Q-1) * DEG < p where p is the prime field of the circuit in order to avoid overflow during the multiplication.
     let pk1_u = poly_mul_equal_deg::<{ DEG - 1 }, F>(ctx, pk1.clone(), u, range.gate());
 
-    // // pk1_u is a polynomial of degree (DEG - 1) * 2 = 2*DEG - 2
-    // // pk1_u has coefficients in the [0, Q^2 - 2Q + 1] range
-    // // Reduce the coefficients by modulo `Q`
+    // pk1_u is a polynomial of degree (DEG - 1) * 2 = 2*DEG - 2
+    // pk1_u has coefficients in the [0, (Q-1) * (Q-1) * DEG] range
+    // Reduce the coefficients by modulo `Q`
     let pk1_u = poly_reduce::<{ 2 * DEG - 2 }, Q, F>(ctx, pk1_u, &range, num_bits_1);
 
     // pk1_u is a polynomial of degree (DEG - 1) * 2 = 2*DEG - 2
