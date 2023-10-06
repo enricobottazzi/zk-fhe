@@ -8,8 +8,10 @@ use halo2_base::Context;
 use halo2_base::QuantumCell::Constant;
 
 /// Enforce that polynomial a of degree DEG is sampled from the distribution chi error
-/// Namely, that the coefficients are in the range [0, B] OR [Q-B, Q-1]
-/// DEG is the degree of the polynomial
+///
+/// * Namely, that the coefficients are in the range [0, B] OR [Q-B, Q-1]
+/// * DEG is the degree of the polynomial
+/// * Assumes that B < Q
 pub fn check_poly_from_distribution_chi_error<
     const DEG: usize,
     const Q: u64,
@@ -29,7 +31,7 @@ pub fn check_poly_from_distribution_chi_error<
     // - Check that coeff is in the range [Q-B, Q-1] and store the boolean result in in_partial_range_2_vec
     // We then perform (`in_partial_range_1` OR `in_partial_range_2`) to check that coeff is in the range [0, B] OR [Q-B, Q-1]
     // The result of this check is stored in the `in_range` vector.
-    // The bool value of `in_range` is then enforced to be true
+    // All the boolean values in `in_range` are then enforced to be true
     let mut in_range_vec = Vec::with_capacity(DEG + 1);
 
     // get the number of bits needed to represent the value of Q
@@ -37,25 +39,26 @@ pub fn check_poly_from_distribution_chi_error<
     let q_bits = binary_representation.len();
 
     for coeff in &a {
-        // First of all, enforce that coefficients are in the [0, 2^q_bits) range to satisfy the assumption of `is_less_than` chip
-        range.is_less_than_safe(ctx, *coeff, 1 << q_bits as u64);
+        // First of all, enforce that coefficient is in the [0, 2^q_bits] range
+        let bool = range.is_less_than_safe(ctx, *coeff, (1 << q_bits as u64) + 1);
+        range.gate().assert_is_const(ctx, &bool, &F::from(1));
 
         // Check for the range [0, B]
         // coeff is known are known to have <= `q_bits` bits according to the constraint set above
-        // B + 1 is known to have <= `q_bits` bits as public constant
+        // B + 1 is known to have <= `q_bits` bits according to assumption of the chip
         // Therefore it satisfies the assumption of `is_less_than` chip
         let in_partial_range_1 = range.is_less_than(ctx, *coeff, Constant(F::from(B + 1)), q_bits);
 
         // Check for the range [Q-B, Q-1]
         // coeff is known are known to have <= `q_bits` bits according to the constraint set above
-        // Q - B is known to have <= `q_bits` bits as public constant
+        // Q - B is known to have <= `q_bits` bits according to assumption of the chip
         // Therefore it satisfies the assumption of `is_less_than` chip
         let not_in_range_lower_bound =
             range.is_less_than(ctx, *coeff, Constant(F::from(Q - B)), q_bits);
         let in_range_lower_bound = range.gate.not(ctx, not_in_range_lower_bound);
 
         // coeff is known are known to have <= `q_bits` bits according to the constraint set above
-        // Q is known to have <= `q_bits` bits as public constant
+        // Q is known to have <= `q_bits` by definition
         // Therefore it satisfies the assumption of `is_less_than` chip
         let in_range_upper_bound = range.is_less_than(ctx, *coeff, Constant(F::from(Q)), q_bits);
         let in_partial_range_2 = range
@@ -75,8 +78,9 @@ pub fn check_poly_from_distribution_chi_error<
 }
 
 /// Enforce that polynomial a of degree DEG is sampled from the distribution chi key
-/// Namely, that the coefficients are in the range [0, 1, Q-1].
-/// DEG is the degree of the polynomial
+///
+/// * Namely, that the coefficients are in the range [0, 1, Q-1].
+/// * DEG is the degree of the polynomial
 pub fn check_poly_from_distribution_chi_key<const DEG: usize, const Q: u64, F: ScalarField>(
     ctx: &mut Context<F>,
     a: Vec<AssignedValue<F>>,

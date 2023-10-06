@@ -2,10 +2,12 @@ use halo2_base::{utils::ScalarField, AssignedValue};
 
 /// Performs long polynomial division on two polynomials
 /// Returns the quotient and remainder
-/// Input polynomials are parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
-/// DEG_DVD is the degree of the dividend
-/// DEG_DVS is the degree of the divisor
-/// Q is the modulus of the Ring. All the coefficients will be in the range [0, Q-1]
+/// 
+/// * Input polynomials are parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
+/// * DEG_DVD is the degree of the dividend
+/// * DEG_DVS is the degree of the divisor
+/// * Q is the modulus of the Ring. All the coefficients will be in the range [0, Q-1]
+/// * Assumes that coefficients of the dividend and divisor are u64 values
 pub fn div_euclid<const DEG_DVD: usize, const DEG_DVS: usize, const Q: u64>(
     dividend: &Vec<u64>,
     divisor: &Vec<u64>,
@@ -85,7 +87,8 @@ pub fn div_euclid<const DEG_DVD: usize, const DEG_DVS: usize, const Q: u64>(
 }
 
 /// Convert a vector of AssignedValue to a vector of u64
-/// Assumes that each element of AssignedValue can be represented in 8 bytes
+/// 
+/// * Assumes that each element of AssignedValue can be represented in 8 bytes
 pub fn vec_assigned_to_vec_u64<F: ScalarField>(vec: &Vec<AssignedValue<F>>) -> Vec<u64> {
     let mut vec_u64 = Vec::new();
 
