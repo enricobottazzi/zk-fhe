@@ -188,7 +188,7 @@ pub fn poly_reduce<const DEG: usize, const Q: u64, F: ScalarField>(
 ///
 /// * DEG_DVD is the degree of the `dividend` polynomial
 /// * DEG_DVS is the degree of the `divisor` polynomial
-/// * Q is the modulus of the Ring
+/// * Q is the modulus of the ring R_q (cipher text space)
 /// * Input polynomials is parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
 /// * Assumes that the degree of dividend is equal to (2 * DEG_DVS) - 2
 /// * Assumes that the coefficients of `dividend` are in the range [0, Q - 1]

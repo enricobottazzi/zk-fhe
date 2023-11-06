@@ -13,7 +13,7 @@ use halo2_scaffold::scaffold::cmd::Cli;
 use halo2_scaffold::scaffold::run;
 use serde::{Deserialize, Serialize};
 use zk_fhe::chips::poly_distribution::{
-    check_poly_from_distribution_chi_error, check_poly_from_distribution_chi_key,
+    check_poly_coefficients_in_range, check_poly_from_distribution_chi_key,
 };
 use zk_fhe::chips::poly_operations::{
     poly_add, poly_divide_by_cyclo, poly_mul_equal_deg, poly_reduce, poly_scalar_mul,
@@ -178,8 +178,8 @@ fn bfv_encryption_circuit<F: ScalarField>(
     */
 
     // Assumption for the chip is that B < Q which is satisfied by circuit assumption
-    check_poly_from_distribution_chi_error::<{ DEG - 1 }, Q, B, F>(ctx, e0.clone(), &range);
-    check_poly_from_distribution_chi_error::<{ DEG - 1 }, Q, B, F>(ctx, e1.clone(), &range);
+    check_poly_coefficients_in_range::<{ DEG - 1 }, Q, B, F>(ctx, e0.clone(), &range);
+    check_poly_coefficients_in_range::<{ DEG - 1 }, Q, B, F>(ctx, e1.clone(), &range);
 
     /* constraint on u
         - u must be a polynomial in the R_q ring => Coefficients must be in the [0, Q-1] range and the degree of u must be DEG - 1
@@ -200,6 +200,8 @@ fn bfv_encryption_circuit<F: ScalarField>(
         - Perform a range check on the coefficients of m to be in the [0, T/2] OR [Q - T/2, Q - 1] range
         - The assignment for loop above guarantees that the degree of m is DEG - 1
     */
+
+    check_poly_coefficients_in_range::<{ DEG - 1 }, Q, { T / 2 }, F>(ctx, m.clone(), &range);
 
     // 1. COMPUTE C0 (c0 is the first ciphertext component)
 
