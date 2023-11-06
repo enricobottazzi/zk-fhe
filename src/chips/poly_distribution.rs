@@ -20,7 +20,7 @@ pub fn check_poly_coefficients_in_range<
     F: ScalarField,
 >(
     ctx: &mut Context<F>,
-    a: Vec<AssignedValue<F>>,
+    a: &Vec<AssignedValue<F>>,
     range: &RangeChip<F>,
 ) {
     // assert that the degree of the polynomial a is equal to DEG
@@ -39,7 +39,7 @@ pub fn check_poly_coefficients_in_range<
     let binary_representation = format!("{:b}", Q);
     let q_bits = binary_representation.len();
 
-    for coeff in &a {
+    for coeff in a {
         // First of all, enforce that coefficient is in the [0, 2^q_bits] range
         let bool = range.is_less_than_safe(ctx, *coeff, (1 << q_bits as u64) + 1);
         range.gate().assert_is_const(ctx, &bool, &F::from(1));
@@ -85,7 +85,7 @@ pub fn check_poly_coefficients_in_range<
 /// * Q is the modulus of the ring R_q (cipher text space)
 pub fn check_poly_from_distribution_chi_key<const DEG: usize, const Q: u64, F: ScalarField>(
     ctx: &mut Context<F>,
-    a: Vec<AssignedValue<F>>,
+    a: &Vec<AssignedValue<F>>,
     gate: &GateChip<F>,
 ) {
     // assert that the degree of the polynomial a is equal to DEG
@@ -96,7 +96,7 @@ pub fn check_poly_from_distribution_chi_key<const DEG: usize, const Q: u64, F: S
     // (coeff - 0) * (coeff - 1) * (coeff - (q-1)) = 0
 
     // loop over all the coefficients of the polynomial
-    for coeff in &a {
+    for coeff in a {
         // constrain (a - 0)
         let factor_1 = gate.sub(ctx, *coeff, Constant(F::from(0)));
 
