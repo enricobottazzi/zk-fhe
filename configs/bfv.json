@@ -1,0 +1,22 @@
+{
+  "params": {
+    "degree": 9,
+    "num_advice": 8,
+    "num_lookup_advice": 2,
+    "num_fixed": 1,
+    "lookup_bits": 8
+  },
+  "break_points": [
+    [
+      501,
+      500,
+      501,
+      502,
+      502,
+      500,
+      501
+    ],
+    [],
+    []
+  ]
+}

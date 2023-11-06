@@ -5,13 +5,46 @@ Implementation based on [Revisiting Homomorphic Encryption Schemes for Finite Fi
 
 The application is not production ready and is only meant to be used for educational purposes.
 
-`LOOKUP_BITS=8 cargo run --example bfv -- --name bfv -k 14  mock`
+## Quick Start
 
-The input data is located in the `data` folder. This test vector file can be generated using [rlwe-py](https://github.com/yuriko627/rlwe-py)
+**Mock Prover**
 
-### Chips 
+`LOOKUP_BITS=8 cargo run --example bfv -- --name bfv -k 9 --input bfv.in mock`
 
-- `check_poly_from_distribution_chi_error` - Enforces polynomial to be sampled from the chi distribution
+The `MockProver` does not run the cryptographic prover on your circuit, but instead directly checks if constraints are satisfied. This is useful for testing purposes, and runs faster than the actual prover.
+
+- `LOOKUP_BITS`, in the backend build a lookup table filled with value in the range [0, 2**LOOKUP_BITS)
+- `bfv` is the name of the circuit located in `examples/bfv.rs` 
+- `bfv.in` is the input file for the circuit located in `data/bfv.in`. This test vector file can be generated for different encryption using [bfv-py](https://github.com/yuriko627/bfv-py)
+- `-k` is the DEGREE of the circuit as you specify to set the circuit to have `2^k` number of rows. The number of rows is determined by the number of constraints in the circuit. Working with larger data inputs will require a larger degree.
+
+**Key Generation**
+
+`LOOKUP_BITS=8 cargo run --example bfv -- --name bfv -k 9 --input bfv.in keygen`
+
+To generate a random universal trusted setup (for testing only!) and the proving and verifying keys for your circuit.
+
+For technical reasons (related to [axiom Halo2-scaffold](https://github.com/axiom-crypto/halo2-scaffold)), keygen still requires an input file of the correct format. You can use the same input file as for the prover. But be aware that the actual input data are not encoded in the key generation. 
+
+This will generate a proving key `data/bfv.pk` and a verifying key `data/bfv.vk`. It will also generate a file `configs/bfv.json` which describes (and pins down) the configuration of the circuit. This configuration file is later read by the prover.
+
+**Proof Generation**
+
+`LOOKUP_BITS=8 cargo run --example bfv -- --name bfv -k 9  --input bfv.in prove`
+
+This creates a SNARK proof, stored as a binary file `data/bfv.snark`, using the inputs read (by default) from `data/halbfvo2_lib.in``. You can specify a different input file with the option `--input filename.in`, which would look for a file at `data/filename.in``.
+
+Using the same proving key, you can generate proofs for the same ZK circuit on different inputs using this command.
+
+**Proof Verification**
+
+`LOOKUP_BITS=8 cargo run --example bfv -- --name bfv -k 9 verify`
+
+Verify the proof generated above
+
+## Chips 
+
+- `check_poly_coefficients_in_range` - Enforces polynomial coefficients to be within a specified range
 - `check_poly_from_distribution_chi_key` - Enforces polynomial to be sampled from the chi key
 - `poly_add` - Enforces polynomial addition
 - `poly_mul_equal_deg` - Enforces polynomial multiplication between polynomials of equal degree
@@ -19,3 +52,4 @@ The input data is located in the `data` folder. This test vector file can be gen
 - `poly_scalar_mul` - Enforces scalar multiplication of a polynomial
 - `poly_reduce` - Enforces reduction of polynomial coefficients by a modulus
 - `poly_divide_by_cyclo` - Enforces the reduction of a polynomial by a cyclotomic polynomial
+
