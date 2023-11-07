@@ -1,19 +1,19 @@
 use crate::chips::utils::{div_euclid, vec_assigned_to_vec_u64};
-use halo2_base::gates::GateChip;
-use halo2_base::gates::GateInstructions;
-use halo2_base::safe_types::RangeChip;
-use halo2_base::safe_types::RangeInstructions;
-use halo2_base::utils::ScalarField;
-use halo2_base::AssignedValue;
-use halo2_base::Context;
-use halo2_base::QuantumCell;
+use axiom_eth::rlp::rlc::RlcChip;
+use axiom_eth::Field;
+use halo2_base::{
+    gates::{GateChip, GateInstructions},
+    safe_types::{RangeChip, RangeInstructions},
+    AssignedValue, Context, QuantumCell,
+    QuantumCell::*,
+};
 
 /// Build the sum of the polynomials a and b as sum of the coefficients
 ///
 /// * DEG is the degree of the input polynomials
 /// * Input polynomials are parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
 /// * It assumes that the coefficients are constrained such to overflow during the polynomial addition
-pub fn poly_add<const DEG: usize, F: ScalarField>(
+pub fn poly_add<const DEG: usize, F: Field>(
     ctx: &mut Context<F>,
     a: Vec<AssignedValue<F>>,
     b: Vec<AssignedValue<F>>,
@@ -36,13 +36,59 @@ pub fn poly_add<const DEG: usize, F: ScalarField>(
     c
 }
 
+/// Enforce that a * b = c
+/// This constraint leverages the Axiom's Challenge API
+/// The challenge API allows us to access a random challenge gamma inside the circuit.
+/// Any polynomial identity can be checked using gamma. e.g. p(x) = q(x) with high probability if p(gamma) = q(gamma) for a challenge gamma
+/// because a random gamma has vanishing probability of being a root of p(x) - q(x).
+/// Analogously, we can check the identity a(gamma) * b(gamma) = c(gamma) for a random gamma.
+///
+/// Complexity:
+/// Computing the polynomial multiplication using the direct method would take O(N^2) constraints
+/// This algorithm takes O(N) constraints as it requires to:
+/// - Evaluate the polynomials a, b and c at gamma (3N constraints)
+/// - Enforce the identity a(gamma) * b(gamma) - c(gamma) = 0 (1 constraint)
+pub fn constrain_poly_mul<F: Field>(
+    a_assigned: Vec<AssignedValue<F>>,
+    a_len: AssignedValue<F>,
+    b_assigned: Vec<AssignedValue<F>>,
+    b_len: AssignedValue<F>,
+    c_assigned: Vec<AssignedValue<F>>,
+    c_len: AssignedValue<F>,
+    ctx_gate: &mut Context<F>,
+    ctx_rlc: &mut Context<F>,
+    rlc: &RlcChip<F>,
+    gate: &GateChip<F>,
+) {
+    // `compute_rlc` evaluates the polynomial at gamma and returns the evaluation
+    let poly_a_trace = rlc.compute_rlc((ctx_gate, ctx_rlc), gate, a_assigned, a_len);
+    let poly_a_eval_assigned = poly_a_trace.rlc_val;
+
+    let poly_b_trace = rlc.compute_rlc((ctx_gate, ctx_rlc), gate, b_assigned, b_len);
+    let poly_b_eval_assigned = poly_b_trace.rlc_val;
+
+    let poly_c_trace = rlc.compute_rlc((ctx_gate, ctx_rlc), gate, c_assigned, c_len);
+    let poly_c_eval_assigned = poly_c_trace.rlc_val;
+
+    // enforce gate a(gamma) * b(gamma) - c(gamma) = 0
+    ctx_gate.assign_region(
+        [
+            Constant(F::from(0)),
+            Existing(poly_a_eval_assigned),
+            Existing(poly_b_eval_assigned),
+            Existing(poly_c_eval_assigned),
+        ],
+        [0],
+    );
+}
+
 /// Build the product of the polynomials a and b as dot product of the coefficients of a and b
 ///
 /// * Compared to `poly_mul_diff_deg`, this function assumes that the polynomials have the same degree and therefore optimizes the computation
 /// * DEG is the degree of the input polynomials
 /// * Input polynomials are parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
 /// * It assumes that the coefficients are constrained such to overflow during the polynomial multiplication
-pub fn poly_mul_equal_deg<const DEG: usize, F: ScalarField>(
+pub fn poly_mul_equal_deg<const DEG: usize, F: Field>(
     ctx: &mut Context<F>,
     a: Vec<AssignedValue<F>>,
     b: Vec<AssignedValue<F>>,
@@ -89,7 +135,7 @@ pub fn poly_mul_equal_deg<const DEG: usize, F: ScalarField>(
 /// * Compared to `poly_mul_equal_deg`, this function doesn't assume that the polynomials have the same degree. Therefore the computation is less efficient.
 /// * Input polynomials are parsed as a vector of assigned coefficients [a_n, a_n-1, ..., a_1, a_0] where a_0 is the constant term and n is the degree of the polynomial
 /// * It assumes that the coefficients are constrained such to overflow during the polynomial multiplication
-pub fn poly_mul_diff_deg<F: ScalarField>(
+pub fn poly_mul_diff_deg<F: Field>(
     ctx: &mut Context<F>,
     a: Vec<AssignedValue<F>>,
     b: Vec<AssignedValue<F>>,
@@ -132,7 +178,7 @@ pub fn poly_mul_diff_deg<F: ScalarField>(
 /// * DEG is the degree of the polynomial
 /// * Input polynomial is parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
 /// * It assumes that the coefficients are constrained such to overflow during the scalar multiplication
-pub fn poly_scalar_mul<const DEG: usize, F: ScalarField>(
+pub fn poly_scalar_mul<const DEG: usize, F: Field>(
     ctx: &mut Context<F>,
     a: Vec<AssignedValue<F>>,
     b: QuantumCell<F>,
@@ -159,7 +205,7 @@ pub fn poly_scalar_mul<const DEG: usize, F: ScalarField>(
 /// * DEG is the degree of the polynomial
 /// * Input polynomial is parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
 /// * It assumes that the coefficients of the input polynomial can be expressed in at most num_bits bits
-pub fn poly_reduce<const DEG: usize, const Q: u64, F: ScalarField>(
+pub fn poly_reduce<const DEG: usize, const Q: u64, F: Field>(
     ctx: &mut Context<F>,
     input: Vec<AssignedValue<F>>,
     range: &RangeChip<F>,
@@ -195,12 +241,7 @@ pub fn poly_reduce<const DEG: usize, const Q: u64, F: ScalarField>(
 /// * Assumes that divisor is a cyclotomic polynomial with coefficients either 0 or 1
 /// * Assumes that dividend and divisor can be expressed as u64 values
 /// * Assumes that Q is chosen such that (Q-1) * (DEG_DVD - DEG_DVS + 1)] + Q-1 < p where p is the prime field of the circuit in order to avoid overflow during the multiplication
-pub fn poly_divide_by_cyclo<
-    const DEG_DVD: usize,
-    const DEG_DVS: usize,
-    const Q: u64,
-    F: ScalarField,
->(
+pub fn poly_divide_by_cyclo<const DEG_DVD: usize, const DEG_DVS: usize, const Q: u64, F: Field>(
     ctx: &mut Context<F>,
     dividend: Vec<AssignedValue<F>>,
     divisor: Vec<AssignedValue<F>>,

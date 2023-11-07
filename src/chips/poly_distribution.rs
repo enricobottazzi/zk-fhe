@@ -1,11 +1,10 @@
-use halo2_base::gates::GateChip;
-use halo2_base::safe_types::GateInstructions;
-use halo2_base::safe_types::RangeChip;
-use halo2_base::safe_types::RangeInstructions;
-use halo2_base::utils::ScalarField;
-use halo2_base::AssignedValue;
-use halo2_base::Context;
-use halo2_base::QuantumCell::Constant;
+use axiom_eth::Field;
+use halo2_base::{
+    gates::GateChip,
+    safe_types::{GateInstructions, RangeChip, RangeInstructions},
+    AssignedValue, Context,
+    QuantumCell::Constant,
+};
 
 /// Enforce that polynomial a of degree DEG is sampled from the distribution chi error
 ///
@@ -16,7 +15,7 @@ pub fn check_poly_from_distribution_chi_error<
     const DEG: usize,
     const Q: u64,
     const B: u64,
-    F: ScalarField,
+    F: Field,
 >(
     ctx: &mut Context<F>,
     a: Vec<AssignedValue<F>>,
@@ -81,7 +80,7 @@ pub fn check_poly_from_distribution_chi_error<
 ///
 /// * Namely, that the coefficients are in the range [0, 1, Q-1].
 /// * DEG is the degree of the polynomial
-pub fn check_poly_from_distribution_chi_key<const DEG: usize, const Q: u64, F: ScalarField>(
+pub fn check_poly_from_distribution_chi_key<const DEG: usize, const Q: u64, F: Field>(
     ctx: &mut Context<F>,
     a: Vec<AssignedValue<F>>,
     gate: &GateChip<F>,

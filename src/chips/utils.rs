@@ -2,7 +2,7 @@ use halo2_base::{utils::ScalarField, AssignedValue};
 
 /// Performs long polynomial division on two polynomials
 /// Returns the quotient and remainder
-/// 
+///
 /// * Input polynomials are parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
 /// * DEG_DVD is the degree of the dividend
 /// * DEG_DVS is the degree of the divisor
@@ -87,7 +87,7 @@ pub fn div_euclid<const DEG_DVD: usize, const DEG_DVS: usize, const Q: u64>(
 }
 
 /// Convert a vector of AssignedValue to a vector of u64
-/// 
+///
 /// * Assumes that each element of AssignedValue can be represented in 8 bytes
 pub fn vec_assigned_to_vec_u64<F: ScalarField>(vec: &Vec<AssignedValue<F>>) -> Vec<u64> {
     let mut vec_u64 = Vec::new();
@@ -103,4 +103,28 @@ pub fn vec_assigned_to_vec_u64<F: ScalarField>(vec: &Vec<AssignedValue<F>>) -> V
         vec_u64.push(num);
     }
     vec_u64
+}
+
+/// Performs polynomial multiplication on two polynomials using direct method
+/// Returns the product of the input polynomials
+///
+/// * Input polynomials are parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
+pub fn poly_mul(a: &Vec<u64>, b: &Vec<u64>) -> Vec<u64> {
+    let deg_a = a.len() - 1;
+    let deg_b = b.len() - 1;
+    let deg_c = deg_a + deg_b;
+
+    // initialize the output polynomial with zeroes
+    let mut c = vec![0; deg_c + 1];
+
+    // perform polynomial multiplication
+    for i in 0..=deg_a {
+        for j in 0..=deg_b {
+            c[i + j] += a[i] * b[j];
+        }
+    }
+
+    assert!(c.len() == deg_c + 1);
+
+    c
 }

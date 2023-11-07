@@ -5,7 +5,7 @@ Implementation based on [Revisiting Homomorphic Encryption Schemes for Finite Fi
 
 The application is not production ready and is only meant to be used for educational purposes.
 
-`LOOKUP_BITS=8 cargo run --example bfv -- --name bfv -k 14  mock`
+`cargo run --example bfv -- --name bfv -k 9  mock`
 
 The input data is located in the `data` folder. This test vector file can be generated using [rlwe-py](https://github.com/yuriko627/rlwe-py)
 
