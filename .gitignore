@@ -15,3 +15,10 @@ Cargo.lock
 
 # Halo2 artifacts
 params/
+
+# Proving and Verifying keys
+/data/*.pk
+/data/*.vk
+
+# Snark Proof
+/data/*.snark
