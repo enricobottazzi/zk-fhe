@@ -12,12 +12,7 @@ use halo2_base::{
 /// * Q is the modulus of the ring R_q (cipher text space)
 /// * Z is the constant that defines the range
 /// * Assumes that Z < Q
-pub fn check_poly_coefficients_in_range<
-    const DEG: usize,
-    const Q: u64,
-    const Z: u64,
-    F: ScalarField,
->(
+pub fn check_poly_coefficients_in_range<const DEG: usize, const Q: u64, const Z: u64, F: Field>(
     ctx: &mut Context<F>,
     a: &Vec<AssignedValue<F>>,
     range: &RangeChip<F>,
