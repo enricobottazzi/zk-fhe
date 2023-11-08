@@ -84,54 +84,6 @@ pub fn constrain_poly_mul<F: Field>(
 
 /// Build the product of the polynomials a and b as dot product of the coefficients of a and b
 ///
-/// * Compared to `poly_mul_diff_deg`, this function assumes that the polynomials have the same degree and therefore optimizes the computation
-/// * DEG is the degree of the input polynomials
-/// * Input polynomials are parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
-/// * It assumes that the coefficients are constrained such to overflow during the polynomial multiplication
-pub fn poly_mul_equal_deg<const DEG: usize, F: Field>(
-    ctx: &mut Context<F>,
-    a: &Vec<AssignedValue<F>>,
-    b: &Vec<AssignedValue<F>>,
-    gate: &GateChip<F>,
-) -> Vec<AssignedValue<F>> {
-    // assert that the input polynomials have the same degree and this is equal to DEG
-    assert_eq!(a.len() - 1, b.len() - 1);
-    assert_eq!(a.len() - 1, DEG);
-
-    let mut c = vec![];
-
-    for i in 0..(2 * DEG + 1) {
-        let mut coefficient_accumaltor = vec![];
-
-        if i < (DEG + 1) {
-            for a_idx in 0..=i {
-                let a_coef = a[a_idx];
-                let b_coef = b[(i - a_idx)];
-                coefficient_accumaltor.push(gate.mul(ctx, a_coef, b_coef));
-            }
-        } else {
-            for a_idx in (i - DEG)..=DEG {
-                let a_coef = a[a_idx];
-                let b_coef = b[(i - a_idx)];
-                coefficient_accumaltor.push(gate.mul(ctx, a_coef, b_coef));
-            }
-        }
-
-        let c_val = coefficient_accumaltor
-            .iter()
-            .fold(ctx.load_witness(F::zero()), |acc, x| gate.add(ctx, acc, *x));
-
-        c.push(c_val);
-    }
-
-    // assert that the product polynomial has degree 2*DEG
-    assert_eq!(c.len() - 1, 2 * DEG);
-
-    c
-}
-
-/// Build the product of the polynomials a and b as dot product of the coefficients of a and b
-///
 /// * Compared to `poly_mul_equal_deg`, this function doesn't assume that the polynomials have the same degree. Therefore the computation is less efficient.
 /// * Input polynomials are parsed as a vector of assigned coefficients [a_n, a_n-1, ..., a_1, a_0] where a_0 is the constant term and n is the degree of the polynomial
 /// * It assumes that the coefficients are constrained such to overflow during the polynomial multiplication
