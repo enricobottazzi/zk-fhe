@@ -99,7 +99,7 @@ fn bfv_encryption_circuit<F: Field>(
     // Challenge API requires a Phase 0 of witness generation. A commitment from the witness generated during Phase 0 is then hashed to generate the random value according to Fiat-Shamir heuristic.
     // This random challenge can be then used as part of witness generation during Phase 1. We will need this to perform efficient polynomial multiplication.
     // Note that if you wanna verify something with the challenge API (eg enforcing polynomial multiplcation)
-    // the stuffs you verify (namely the input polynomials) must be assigned in phase 0 so their values can be part of the Phase 0 commtiment and contribute to Gamma. 
+    // the stuffs you verify (namely the input polynomials) must be assigned in phase 0 so their values can be part of the Phase 0 commtiment and contribute to Gamma.
 
     // Phase 0: Assign the input polynomials to the circuit witness table
     // Using a for loop from 0 to DEG - 1 enforces that the assigned input polynomials have the same degree and this is equal to DEG - 1
@@ -167,9 +167,8 @@ fn bfv_encryption_circuit<F: Field>(
 
     assert!(cyclo.len() - 1 == DEG);
 
-    // Assign the length of the input polynomials pk0 and u to the circuit
-    let pk0_len = ctx.load_witness(F::from(input.pk0.len() as u64));
-    let u_len = ctx.load_witness(F::from(input.u.len() as u64));
+    // Assign the length of the input polynomials pk0 and u to the circuit. This is equal to DEG
+    let poly_len = ctx.load_witness(F::from(DEG as u64));
 
     // Compute the polynomial pk0 * u outside the circuit
     let pk0_u_u64 = poly_mul(&input.pk0, &input.u);
@@ -178,6 +177,7 @@ fn bfv_encryption_circuit<F: Field>(
     let mut pk0_u = vec![];
 
     // This should be a polynomial of degree 2*(DEG - 1)
+    // Using a for loop from 0 to 2*(DEG - 1) enforces that pk0_u has degree equal to 2*(DEG - 1)
     for &item in pk0_u_u64.iter().take(2 * (DEG - 1) + 1) {
         let pk0_u_val = F::from(item);
         let pk0_u_assigned_value = ctx.load_witness(pk0_u_val);
@@ -186,11 +186,8 @@ fn bfv_encryption_circuit<F: Field>(
 
     assert!(pk0_u.len() - 1 == 2 * (DEG - 1));
 
-    // Assign the length of the polynomial pk0_u to the circuit
-    let pk0_u_len = ctx.load_witness(F::from(pk0_u.len() as u64));
-
-    // Assign the length of the input polynomials pk1 and u to the circuit
-    let pk1_len = ctx.load_witness(F::from(input.pk1.len() as u64));
+    // Assign the length of the polynomial pk0_u to the circuit -> this is equal to 2*(DEG - 1) + 1
+    let pk_u_len = ctx.load_witness(F::from((2 * (DEG - 1) + 1) as u64));
 
     // Compute the polynomial pk1 * u outside the circuit
     let pk1_u_u64 = poly_mul(&input.pk1, &input.u);
@@ -199,6 +196,7 @@ fn bfv_encryption_circuit<F: Field>(
     let mut pk1_u = vec![];
 
     // This should be a polynomial of degree 2*(DEG - 1)
+    // Using a for loop from 0 to 2*(DEG - 1) enforces that pk1_u has degree equal to 2*(DEG - 1)
     for &item in pk1_u_u64.iter().take(2 * (DEG - 1) + 1) {
         let pk1_u_val = F::from(item);
         let pk1_u_assigned_value = ctx.load_witness(pk1_u_val);
@@ -206,9 +204,6 @@ fn bfv_encryption_circuit<F: Field>(
     }
 
     assert!(pk1_u.len() - 1 == 2 * (DEG - 1));
-
-    // Assign the length of the polynomial pk1_u to the circuit
-    let pk1_u_len = ctx.load_witness(F::from(pk1_u.len() as u64));
 
     // Expose to the public pk0 and pk1
     for &assigned_coefficient_pk0 in pk0.iter().take(DEG) {
@@ -311,11 +306,11 @@ fn bfv_encryption_circuit<F: Field>(
         // Enforce pk0_u = pk0 * u using `constrain_poly_mul` gate
         constrain_poly_mul(
             pk0,
-            pk0_len,
+            poly_len,
             u.clone(),
-            u_len,
+            poly_len,
             pk0_u.clone(),
-            pk0_u_len,
+            pk_u_len,
             ctx_gate,
             ctx_rlc,
             rlc,
@@ -519,11 +514,11 @@ fn bfv_encryption_circuit<F: Field>(
         // Enforce pk1_u = pk1 * u using `constrain_poly_mul` gate
         constrain_poly_mul(
             pk1,
-            pk1_len,
+            poly_len,
             u.clone(),
-            u_len,
+            poly_len,
             pk1_u.clone(),
-            pk1_u_len,
+            pk_u_len,
             ctx_gate,
             ctx_rlc,
             rlc,
