@@ -15,8 +15,8 @@ use halo2_base::QuantumCell;
 /// * It assumes that the coefficients are constrained such to overflow during the polynomial addition
 pub fn poly_add<const DEG: usize, F: ScalarField>(
     ctx: &mut Context<F>,
-    a: Vec<AssignedValue<F>>,
-    b: Vec<AssignedValue<F>>,
+    a: &Vec<AssignedValue<F>>,
+    b: &Vec<AssignedValue<F>>,
     gate: &GateChip<F>,
 ) -> Vec<AssignedValue<F>> {
     // assert that the input polynomials have the same degree and this is equal to DEG
@@ -44,8 +44,8 @@ pub fn poly_add<const DEG: usize, F: ScalarField>(
 /// * It assumes that the coefficients are constrained such to overflow during the polynomial multiplication
 pub fn poly_mul_equal_deg<const DEG: usize, F: ScalarField>(
     ctx: &mut Context<F>,
-    a: Vec<AssignedValue<F>>,
-    b: Vec<AssignedValue<F>>,
+    a: &Vec<AssignedValue<F>>,
+    b: &Vec<AssignedValue<F>>,
     gate: &GateChip<F>,
 ) -> Vec<AssignedValue<F>> {
     // assert that the input polynomials have the same degree and this is equal to DEG
@@ -91,8 +91,8 @@ pub fn poly_mul_equal_deg<const DEG: usize, F: ScalarField>(
 /// * It assumes that the coefficients are constrained such to overflow during the polynomial multiplication
 pub fn poly_mul_diff_deg<F: ScalarField>(
     ctx: &mut Context<F>,
-    a: Vec<AssignedValue<F>>,
-    b: Vec<AssignedValue<F>>,
+    a: &Vec<AssignedValue<F>>,
+    b: &Vec<AssignedValue<F>>,
     gate: &GateChip<F>,
 ) -> Vec<AssignedValue<F>> {
     let a_deg = a.len() - 1;
@@ -134,8 +134,8 @@ pub fn poly_mul_diff_deg<F: ScalarField>(
 /// * It assumes that the coefficients are constrained such to overflow during the scalar multiplication
 pub fn poly_scalar_mul<const DEG: usize, F: ScalarField>(
     ctx: &mut Context<F>,
-    a: Vec<AssignedValue<F>>,
-    b: QuantumCell<F>,
+    a: &Vec<AssignedValue<F>>,
+    b: &QuantumCell<F>,
     gate: &GateChip<F>,
 ) -> Vec<AssignedValue<F>> {
     // assert that the degree of the polynomial a is equal to DEG
@@ -144,7 +144,7 @@ pub fn poly_scalar_mul<const DEG: usize, F: ScalarField>(
     let mut c = vec![];
 
     for i in 0..=DEG {
-        let val = gate.mul(ctx, a[i], b);
+        let val = gate.mul(ctx, a[i], *b);
         c.push(val);
     }
 
@@ -161,7 +161,7 @@ pub fn poly_scalar_mul<const DEG: usize, F: ScalarField>(
 /// * It assumes that the coefficients of the input polynomial can be expressed in at most num_bits bits
 pub fn poly_reduce<const DEG: usize, const Q: u64, F: ScalarField>(
     ctx: &mut Context<F>,
-    input: Vec<AssignedValue<F>>,
+    input: &Vec<AssignedValue<F>>,
     range: &RangeChip<F>,
     num_bits: usize,
 ) -> Vec<AssignedValue<F>> {
@@ -188,7 +188,7 @@ pub fn poly_reduce<const DEG: usize, const Q: u64, F: ScalarField>(
 ///
 /// * DEG_DVD is the degree of the `dividend` polynomial
 /// * DEG_DVS is the degree of the `divisor` polynomial
-/// * Q is the modulus of the Ring
+/// * Q is the modulus of the ring R_q (cipher text space)
 /// * Input polynomials is parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
 /// * Assumes that the degree of dividend is equal to (2 * DEG_DVS) - 2
 /// * Assumes that the coefficients of `dividend` are in the range [0, Q - 1]
@@ -202,8 +202,8 @@ pub fn poly_divide_by_cyclo<
     F: ScalarField,
 >(
     ctx: &mut Context<F>,
-    dividend: Vec<AssignedValue<F>>,
-    divisor: Vec<AssignedValue<F>>,
+    dividend: &Vec<AssignedValue<F>>,
+    divisor: &Vec<AssignedValue<F>>,
     range: &RangeChip<F>,
 ) -> Vec<AssignedValue<F>> {
     // Assert that degree of dividend polynomial is equal to the constant DEG_DVD
@@ -320,7 +320,7 @@ pub fn poly_divide_by_cyclo<
 
     // We use a polynomial multiplication algorithm that does not require the input polynomials to be of the same degree
 
-    let prod = poly_mul_diff_deg(ctx, quotient, divisor, range.gate());
+    let prod = poly_mul_diff_deg(ctx, &quotient, divisor, range.gate());
 
     // The degree of prod is DEG_DVD
     assert_eq!(prod.len() - 1, DEG_DVD);
@@ -339,7 +339,7 @@ pub fn poly_divide_by_cyclo<
     // Q needs to be chosen such that (Q-1) * (DEG_DVD - DEG_DVS + 1)] + Q-1 < p where p is the prime field of the circuit in order to avoid overflow during the addition.
     // This is true by assumption of the chip.
 
-    let sum = poly_add::<DEG_DVD, F>(ctx, prod, remainder.clone(), range.gate());
+    let sum = poly_add::<DEG_DVD, F>(ctx, &prod, &remainder, range.gate());
 
     // assert that the degree of sum is DEG_DVD
     assert_eq!(sum.len() - 1, DEG_DVD);
@@ -355,7 +355,7 @@ pub fn poly_divide_by_cyclo<
 
     // The coefficients of sum are in the range [0, (Q-1) * (DEG_DVD - DEG_DVS + 1)] + Q-1] according to the polynomial addition constraint set above.
     // Therefore the coefficients of sum are known to have <= `num_bits` bits, therefore they satisfy the assumption of the `poly_reduce` chip
-    let sum_mod = poly_reduce::<DEG_DVD, Q, F>(ctx, sum, range, num_bits);
+    let sum_mod = poly_reduce::<DEG_DVD, Q, F>(ctx, &sum, range, num_bits);
 
     // assert that the degree of sum_mod is DEG_DVD
     assert_eq!(sum_mod.len() - 1, DEG_DVD);
