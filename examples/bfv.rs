@@ -98,6 +98,8 @@ fn bfv_encryption_circuit<F: Field>(
     // In order to draw randomness within the circuit we use Axiom's Challenge API (https://hackmd.io/@axiom/SJw3p-qX3)
     // Challenge API requires a Phase 0 of witness generation. A commitment from the witness generated during Phase 0 is then hashed to generate the random value according to Fiat-Shamir heuristic.
     // This random challenge can be then used as part of witness generation during Phase 1. We will need this to perform efficient polynomial multiplication.
+    // Note that if you wanna verify something with the challenge API (eg enforcing polynomial multiplcation)
+    // the stuffs you verify (namely the input polynomials) must be assigned in phase 0 so their values can be part of the Phase 0 commtiment and contribute to Gamma. 
 
     // Phase 0: Assign the input polynomials to the circuit witness table
     // Using a for loop from 0 to DEG - 1 enforces that the assigned input polynomials have the same degree and this is equal to DEG - 1
