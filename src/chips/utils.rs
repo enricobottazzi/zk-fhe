@@ -1,4 +1,5 @@
 use halo2_base::{utils::ScalarField, AssignedValue};
+use num_bigint::BigUint;
 
 /// Performs long polynomial division on two polynomials
 /// Returns the quotient and remainder
@@ -109,22 +110,27 @@ pub fn vec_assigned_to_vec_u64<F: ScalarField>(vec: &Vec<AssignedValue<F>>) -> V
 /// Returns the product of the input polynomials
 ///
 /// * Input polynomials are parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
-pub fn poly_mul(a: &Vec<u64>, b: &Vec<u64>) -> Vec<u64> {
+pub fn poly_mul(a: &Vec<u64>, b: &Vec<u64>) -> Vec<BigUint> {
     let deg_a = a.len() - 1;
     let deg_b = b.len() - 1;
     let deg_c = deg_a + deg_b;
 
     // initialize the output polynomial with zeroes
-    let mut c = vec![0; deg_c + 1];
+    let mut c = vec![BigUint::from(0 as u64); deg_c + 1];
 
     // perform polynomial multiplication
     for i in 0..=deg_a {
         for j in 0..=deg_b {
-            c[i + j] += a[i] * b[j];
+            c[i + j] += BigUint::from(a[i]) * BigUint::from(b[j]);
         }
     }
 
     assert!(c.len() == deg_c + 1);
 
     c
+}
+
+/// Converts a BigUint to a Field Element
+pub fn big_uint_to_fp<F: ScalarField>(big_uint: &BigUint) -> F {
+    F::from_str_vartime(&big_uint.to_str_radix(10)[..]).unwrap()
 }
