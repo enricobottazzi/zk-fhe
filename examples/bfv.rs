@@ -11,6 +11,7 @@ use halo2_base::Context;
 use halo2_base::QuantumCell::Constant;
 use halo2_scaffold::scaffold::cmd::Cli;
 use halo2_scaffold::scaffold::run;
+use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use zk_fhe::chips::poly_distribution::{
     check_poly_coefficients_in_range, check_poly_from_distribution_chi_key,
@@ -234,8 +235,11 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // Reduce the coefficients by modulo `Q`
 
     // get the number of bits needed to represent the value of (Q-1) * (Q-1) * DEG
+    let q = BigUint::from(Q as u64);
+    let deg = BigUint::from(DEG as u64);
+    let q_minus_1 = q - 1u64;
+    let binary_representation = format!("{:b}", (q_minus_1.clone() * q_minus_1 * deg));
 
-    let binary_representation = format!("{:b}", ((Q - 1) * (Q - 1) * (DEG as u64)));
     let num_bits_1 = binary_representation.len();
 
     // The coefficients of pk0_u are in the range [0, (Q-1) * (Q-1) * DEG] according to the polynomial multiplication constraint set above.
@@ -308,7 +312,7 @@ fn bfv_encryption_circuit<F: ScalarField>(
     // Reduce the coefficients of `m_delta` by modulo `Q`
 
     // get the number of bits needed to represent the value of (Q-1) * (Q/T)
- 
+
     let binary_representation = format!("{:b}", ((Q - 1) * (Q / T)));
     let num_bits_2 = binary_representation.len();
 

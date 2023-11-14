@@ -12,5 +12,7 @@ clap = { version = "=4.1", features = ["derive"] }
 serde = { version = "=1.0", default-features = false, features = ["derive"] }
 env_logger = "=0.10"
 rand = "0.8"
+num-bigint = "0.4"
+
 
 
