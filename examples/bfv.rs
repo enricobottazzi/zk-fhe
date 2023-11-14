@@ -4,6 +4,7 @@ use clap::Parser;
 use halo2_base::safe_types::{GateInstructions, RangeInstructions};
 use halo2_base::{AssignedValue, Context, QuantumCell::Constant};
 use halo2_scaffold::scaffold::{cmd::Cli, run_eth};
+use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use zk_fhe::chips::poly_distribution::{
     check_poly_coefficients_in_range, check_poly_from_distribution_chi_key,
@@ -324,7 +325,12 @@ fn bfv_encryption_circuit<F: Field>(
 
         // get the number of bits needed to represent the value of (Q-1) * (Q-1) * DEG
 
-        let binary_representation = format!("{:b}", ((Q - 1) * (Q - 1) * (DEG as u64)));
+        // get the number of bits needed to represent the value of (Q-1) * (Q-1) * DEG
+        let q = BigUint::from(Q as u64);
+        let deg = BigUint::from(DEG as u64);
+        let q_minus_1 = q - 1u64;
+        let binary_representation = format!("{:b}", (q_minus_1.clone() * q_minus_1 * deg));
+
         let num_bits_1 = binary_representation.len();
 
         // The coefficients of pk0_u are in the range [0, (Q-1) * (Q-1) * DEG] according to the polynomial multiplication constraint set above.
