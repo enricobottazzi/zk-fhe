@@ -55,9 +55,9 @@ Verify the proof generated above
 
 ## Benchmarks
 
-Proving time: 1077s (17.95 minutes) using `bfv_2 as input` run on M2 Macbook Pro with 12 cores and 32GB of RAM.
+Proving time: 1077s (17.95 minutes) using `bfv_2` as input run on M2 Macbook Pro with 12 cores and 32GB of RAM.
 
-DEG and Q Parameters of the BFV encryption scheme should be chosen according to TABLES of RECOMMENDED PARAMETERS for 128-bits security level =? https://homomorphicencryption.org/wp-content/uploads/2018/11/HomomorphicEncryptionStandardv1.1.pdf. 
+DEG and Q Parameters of the BFV encryption scheme should be chosen according to TABLES of RECOMMENDED PARAMETERS for 128-bits security level => https://homomorphicencryption.org/wp-content/uploads/2018/11/HomomorphicEncryptionStandardv1.1.pdf. 
 
 In order to reproduce the benchmark modify the following parameters in `examples/bfv.rs`:
 
