@@ -53,3 +53,17 @@ Verify the proof generated above
 - `poly_reduce` - Enforces reduction of polynomial coefficients by a modulus
 - `poly_divide_by_cyclo` - Enforces the reduction of a polynomial by a cyclotomic polynomial
 
+## Benchmarks
+
+Proving time: 1077s (17.95 minutes) using `bfv_2 as input` run on M2 Macbook Pro with 12 cores and 32GB of RAM.
+
+DEG and Q Parameters of the BFV encryption scheme should be chosen according to TABLES of RECOMMENDED PARAMETERS for 128-bits security level =? https://homomorphicencryption.org/wp-content/uploads/2018/11/HomomorphicEncryptionStandardv1.1.pdf. 
+
+In order to reproduce the benchmark modify the following parameters in `examples/bfv.rs`:
+
+```rust
+const DEG: usize = 1024;
+const Q: u64 = 536870909;
+```
+
+Then run the same commands as above modifying the input file name to `bfv_2.in` and the degree to `-k 18`.
