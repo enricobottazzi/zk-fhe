@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+axiom-eth = { git = "https://github.com/axiom-crypto/axiom-eth.git", branch = "community-edition", default-features = false, features = ["halo2-axiom", "aggregation", "evm", "clap"] }
 halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", tag = "v0.3.0-ce" }
 halo2-scaffold = {git = "https://github.com/axiom-crypto/halo2-scaffold" }
 clap = { version = "=4.1", features = ["derive"] }
@@ -14,5 +15,31 @@ env_logger = "=0.10"
 rand = "0.8"
 num-bigint = "0.4"
 
+# Dev / testing mode. We make opt-level = 3 to improve proving times (otherwise it is really slow)
+[profile.dev]
+opt-level = 3
+debug = 1 # change to 0 or 2 for more or less debug info
+overflow-checks = true # default
+incremental = true # default
 
+# Local "release" mode, more optimized than dev but faster to compile than release
+[profile.local]
+inherits = "dev"
+opt-level = 3
+# Set this to 1 or 2 to get more useful backtraces
+debug = 1
+debug-assertions = false
+panic = 'unwind'
+# better recompile times
+incremental = true
+lto = "thin"
+codegen-units = 16
+
+[profile.release]
+opt-level = 3
+debug = false
+debug-assertions = false
+lto = "fat"
+panic = "abort"
+incremental = false
 

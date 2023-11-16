@@ -9,7 +9,7 @@ The application is not production ready and is only meant to be used for educati
 
 **Mock Prover**
 
-`LOOKUP_BITS=8 cargo run --example bfv -- --name bfv -k 9 --input bfv.in mock`
+`cargo run --example bfv -- --name bfv -k 9 --input bfv.in mock`
 
 The `MockProver` does not run the cryptographic prover on your circuit, but instead directly checks if constraints are satisfied. This is useful for testing purposes, and runs faster than the actual prover.
 
@@ -20,7 +20,7 @@ The `MockProver` does not run the cryptographic prover on your circuit, but inst
 
 **Key Generation**
 
-`LOOKUP_BITS=8 cargo run --example bfv -- --name bfv -k 9 --input bfv.in keygen`
+`cargo run --example bfv -- --name bfv -k 9 --input bfv.in keygen`
 
 To generate a random universal trusted setup (for testing only!) and the proving and verifying keys for your circuit.
 
@@ -30,7 +30,7 @@ This will generate a proving key `data/bfv.pk` and a verifying key `data/bfv.vk`
 
 **Proof Generation**
 
-`LOOKUP_BITS=8 cargo run --example bfv -- --name bfv -k 9  --input bfv.in prove`
+`cargo run --example bfv -- --name bfv -k 9  --input bfv.in prove`
 
 This creates a SNARK proof, stored as a binary file `data/bfv.snark`, using the inputs read (by default) from `data/halbfvo2_lib.in``. You can specify a different input file with the option `--input filename.in`, which would look for a file at `data/filename.in``.
 
@@ -38,7 +38,7 @@ Using the same proving key, you can generate proofs for the same ZK circuit on d
 
 **Proof Verification**
 
-`LOOKUP_BITS=8 cargo run --example bfv -- --name bfv -k 9 verify`
+`cargo run --example bfv -- --name bfv -k 9 verify`
 
 Verify the proof generated above
 
@@ -55,7 +55,10 @@ Verify the proof generated above
 
 ## Benchmarks
 
-Proving time: 1077s (17.95 minutes) using `bfv_2` as input run on M2 Macbook Pro with 12 cores and 32GB of RAM.
+**Proving time: 61s** 
+**Verification time: 261ms**
+
+Benches run using `bfv_2` run on M2 Macbook Pro with 12 cores and 32GB of RAM.
 
 DEG and Q Parameters of the BFV encryption scheme should be chosen according to TABLES of RECOMMENDED PARAMETERS for 128-bits security level => https://homomorphicencryption.org/wp-content/uploads/2018/11/HomomorphicEncryptionStandardv1.1.pdf. 
 
