@@ -55,8 +55,8 @@ Verify the proof generated above
 
 ## Benchmarks
 
-**Proving time: 61s** 
-**Verification time: 261ms**
+- **Proving time: 61s** 
+- **Verification time: 261ms**
 
 Benches run using `bfv_2` run on M2 Macbook Pro with 12 cores and 32GB of RAM.
 
