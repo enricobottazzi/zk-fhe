@@ -15,5 +15,31 @@ env_logger = "=0.10"
 rand = "0.8"
 num-bigint = "0.4"
 
+# Dev / testing mode. We make opt-level = 3 to improve proving times (otherwise it is really slow)
+[profile.dev]
+opt-level = 3
+debug = 1 # change to 0 or 2 for more or less debug info
+overflow-checks = true # default
+incremental = true # default
 
+# Local "release" mode, more optimized than dev but faster to compile than release
+[profile.local]
+inherits = "dev"
+opt-level = 3
+# Set this to 1 or 2 to get more useful backtraces
+debug = 1
+debug-assertions = false
+panic = 'unwind'
+# better recompile times
+incremental = true
+lto = "thin"
+codegen-units = 16
+
+[profile.release]
+opt-level = 3
+debug = false
+debug-assertions = false
+lto = "fat"
+panic = "abort"
+incremental = false
 

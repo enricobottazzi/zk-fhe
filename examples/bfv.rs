@@ -52,8 +52,8 @@ use zk_fhe::chips::utils::{big_uint_to_fp, poly_mul};
 // T should be be picked according to Lattigo (https://github.com/tuneinsight/lattigo/blob/master/bfv/params.go) implementation
 // As suggest by https://eprint.iacr.org/2021/204.pdf (paragraph 2) B = 6σerr
 // These are just parameters used for fast testing
-const DEG: usize = 4;
-const Q: u64 = 4637;
+const DEG: usize = 1024;
+const Q: u64 = 536870909;
 const T: u64 = 7;
 const B: u64 = 18;
 
