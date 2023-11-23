@@ -12,7 +12,7 @@ use zk_fhe::chips::poly_distribution::{
 use zk_fhe::chips::poly_operations::{
     constrain_poly_mul, poly_add, poly_divide_by_cyclo, poly_reduce, poly_scalar_mul,
 };
-use zk_fhe::chips::utils::{big_uint_to_fp, poly_mul};
+use zk_fhe::chips::utils::{big_uint_to_fp, poly_mul, vec_u64_to_vec_big_uint};
 
 /// Circuit inputs for BFV encryption operations
 ///
@@ -158,13 +158,17 @@ fn bfv_encryption_circuit<F: Field>(
     let poly_len = ctx.load_witness(F::from(DEG as u64));
 
     // Compute the polynomial pk0 * u outside the circuit
-    let pk0_u_u64 = poly_mul(&input.pk0, &input.u);
-    // Assign the polynomial pk0_u_u64 to the circuit
+    let pk0_u_unassigned = poly_mul(
+        &vec_u64_to_vec_big_uint(&input.pk0),
+        &vec_u64_to_vec_big_uint(&input.u),
+    );
+
+    // Assign the polynomial pk0_u_unassigned to the circuit
     let mut pk0_u = vec![];
 
     // This should be a polynomial of degree 2*(DEG - 1)
     // Using a for loop from 0 to 2*(DEG - 1) enforces that pk0_u has degree equal to 2*(DEG - 1)
-    for item in pk0_u_u64.iter().take(2 * (DEG - 1) + 1) {
+    for item in pk0_u_unassigned.iter().take(2 * (DEG - 1) + 1) {
         let pk0_u_val = big_uint_to_fp(item);
         let pk0_u_assigned_value = ctx.load_witness(pk0_u_val);
         pk0_u.push(pk0_u_assigned_value);
@@ -176,14 +180,17 @@ fn bfv_encryption_circuit<F: Field>(
     let pk_u_len = ctx.load_witness(F::from((2 * (DEG - 1) + 1) as u64));
 
     // Compute the polynomial pk1 * u outside the circuit
-    let pk1_u_u64 = poly_mul(&input.pk1, &input.u);
+    let pk1_u_unassigned = poly_mul(
+        &vec_u64_to_vec_big_uint(&input.pk1),
+        &vec_u64_to_vec_big_uint(&input.u),
+    );
 
-    // Assign the polynomial pk1_u_u64 to the circuit
+    // Assign the polynomial pk1_u_unassigned to the circuit
     let mut pk1_u = vec![];
 
     // This should be a polynomial of degree 2*(DEG - 1)
     // Using a for loop from 0 to 2*(DEG - 1) enforces that pk1_u has degree equal to 2*(DEG - 1)
-    for item in pk1_u_u64.iter().take(2 * (DEG - 1) + 1) {
+    for item in pk1_u_unassigned.iter().take(2 * (DEG - 1) + 1) {
         let pk1_u_val = big_uint_to_fp(item);
         let pk1_u_assigned_value = ctx.load_witness(pk1_u_val);
         pk1_u.push(pk1_u_assigned_value);

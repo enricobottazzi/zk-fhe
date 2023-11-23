@@ -1,5 +1,6 @@
 use halo2_base::{utils::ScalarField, AssignedValue};
 use num_bigint::BigUint;
+use num_traits::identities::Zero;
 
 /// Performs long polynomial division on two polynomials
 /// Returns the quotient and remainder
@@ -106,22 +107,33 @@ pub fn vec_assigned_to_vec_u64<F: ScalarField>(vec: &Vec<AssignedValue<F>>) -> V
     vec_u64
 }
 
+/// Convert a vector of u64 to a vector of BigUint
+pub fn vec_u64_to_vec_big_uint(vec: &Vec<u64>) -> Vec<BigUint> {
+    let mut vec_big_uint = Vec::new();
+
+    for i in 0..vec.len() {
+        vec_big_uint.push(BigUint::from(vec[i]));
+    }
+    vec_big_uint
+}
+
 /// Performs polynomial multiplication on two polynomials using direct method
 /// Returns the product of the input polynomials
 ///
-/// * Input polynomials are parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
-pub fn poly_mul(a: &Vec<u64>, b: &Vec<u64>) -> Vec<BigUint> {
+/// * Input polynomials are parsed as a vector of BigUint coefficients [a_DEG, a_DEG-1, ..., a_1, a_0]
+///   where a_0 is the constant term
+pub fn poly_mul(a: &Vec<BigUint>, b: &Vec<BigUint>) -> Vec<BigUint> {
     let deg_a = a.len() - 1;
     let deg_b = b.len() - 1;
     let deg_c = deg_a + deg_b;
 
     // initialize the output polynomial with zeroes
-    let mut c = vec![BigUint::from(0 as u64); deg_c + 1];
+    let mut c = vec![BigUint::zero(); deg_c + 1];
 
     // perform polynomial multiplication
     for i in 0..=deg_a {
         for j in 0..=deg_b {
-            c[i + j] += BigUint::from(a[i]) * BigUint::from(b[j]);
+            c[i + j] += &a[i] * &b[j];
         }
     }
 
