@@ -4,8 +4,7 @@ use clap::Parser;
 use halo2_base::safe_types::{GateInstructions, RangeInstructions};
 use halo2_base::{AssignedValue, Context, QuantumCell::Constant};
 use halo2_scaffold::scaffold::{cmd::Cli, run_eth};
-use num_bigint::{BigInt, BigUint};
-use num_traits::Zero;
+use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
 use zk_fhe::chips::poly_distribution::{
     check_poly_coefficients_in_range, check_poly_from_distribution_chi_key,
@@ -13,7 +12,9 @@ use zk_fhe::chips::poly_distribution::{
 use zk_fhe::chips::poly_operations::{
     constrain_poly_mul, poly_add, poly_divide_by_cyclo, poly_reduce, poly_scalar_mul,
 };
-use zk_fhe::chips::utils::{big_int_to_fp, div_euclid_big_int, poly_mul, vec_u64_to_vec_big_int};
+use zk_fhe::chips::utils::{
+    big_uint_to_fp, div_euclid, poly_mul, reduce_poly, vec_u64_to_vec_bigint,
+};
 
 /// Circuit inputs for BFV encryption operations
 ///
@@ -158,6 +159,9 @@ fn bfv_encryption_circuit<F: Field>(
     // Assign the length of the input polynomials pk0, pk1 and u to the circuit. This is equal to DEG
     let poly_len = ctx.load_witness(F::from(DEG as u64));
 
+    // Assign the length of the cyclotomic polynomial to the circuit. This is equal to DEG + 1
+    let cyclo_len = ctx.load_witness(F::from((DEG + 1) as u64));
+
     // Expose to the public pk0 and pk1
     for &assigned_coefficient_pk0 in pk0.iter().take(DEG) {
         make_public.push(assigned_coefficient_pk0);
@@ -187,57 +191,43 @@ fn bfv_encryption_circuit<F: Field>(
 
     // Compute the polynomial pk0 * u outside the circuit
     let pk0_u_unassigned = poly_mul(
-        &vec_u64_to_vec_big_int(&input.pk0),
-        &vec_u64_to_vec_big_int(&input.u),
+        &vec_u64_to_vec_bigint(&input.pk0),
+        &vec_u64_to_vec_bigint(&input.u),
     );
 
     // Compute the polynomial pk1 * u outside the circuit
     let pk1_u_unassigned = poly_mul(
-        &vec_u64_to_vec_big_int(&input.pk1),
-        &vec_u64_to_vec_big_int(&input.u),
+        &vec_u64_to_vec_bigint(&input.pk1),
+        &vec_u64_to_vec_bigint(&input.u),
     );
 
-    // Compute pk0_u_unassigned / cyclo outside the circuit
-    let (mut quotient_0, mut pk0_u_reduced_by_cyclo) =
-        div_euclid_big_int::<{ 2 * (DEG - 1) }, DEG, F>(
-            &pk0_u_unassigned,
-            &vec_u64_to_vec_big_int(&input.cyclo),
-        );
+    // Reduce pk0_u by modulo Q
+    let pk0_u_reduced = reduce_poly::<Q>(&pk0_u_unassigned);
 
-    // Compute pk1_u_unassigned / cyclo outside the circuit
-    let (mut quotient_1, mut pk1_u_reduced_by_cyclo) =
-        div_euclid_big_int::<{ 2 * (DEG - 1) }, DEG, F>(
-            &pk1_u_unassigned,
-            &vec_u64_to_vec_big_int(&input.cyclo),
-        );
+    // Reduce pk1 by modulo Q
+    let pk1_u_reduced = reduce_poly::<Q>(&pk1_u_unassigned);
 
-    // pad quotient_0 with zeroes at the beginning to make its degree equal to DEG (same as cyclo)
-    while quotient_0.len() - 1 < DEG {
-        quotient_0.insert(0, BigInt::zero());
-    }
+    // Compute the division between pk0_u_reduced and cyclo outside the circuit
+    let (quotient_0, remainder_0) =
+        div_euclid::<{ 2 * DEG - 2 }, DEG, Q>(&pk0_u_reduced, &vec_u64_to_vec_bigint(&input.cyclo));
 
-    // pad quotient_1 with zeroes at the beginning to make its degree equal to DEG (same as cyclo)
-    while quotient_1.len() - 1 < DEG {
-        quotient_1.insert(0, BigInt::zero());
-    }
+    // Compute the division between pk1_u_reduced and cyclo outside the circuit
+    let (quotient_1, remainder_1) =
+        div_euclid::<{ 2 * DEG - 2 }, DEG, Q>(&pk1_u_reduced, &vec_u64_to_vec_bigint(&input.cyclo));
 
-    // Compute quotient_0 * cyclo outside the circuit
-    let quotient_0_times_cyclo = poly_mul(&quotient_0, &vec_u64_to_vec_big_int(&input.cyclo));
+    // assert that the degree of quotient is DEG_DVD - DEG_DVS
+    assert_eq!(quotient_0.len() - 1, 2 * DEG - 2 - DEG);
+    assert_eq!(quotient_1.len() - 1, 2 * DEG - 2 - DEG);
 
-    // Compute quotient_1 * cyclo outside the circuit
-    let quotient_1_times_cyclo = poly_mul(&quotient_1, &vec_u64_to_vec_big_int(&input.cyclo));
+    // Compute the polynomial multiplication between quotient_0 * cyclo outside the circuit
+    let quotient_0_times_cyclo = poly_mul(&quotient_0, &vec_u64_to_vec_bigint(&input.cyclo));
 
-    // Pad pk0_u_reduced_by_cyclo with zeroes at the beginning to make its degree equal to 2*DEG (same as quotient_0_times_cyclo)
-    while pk0_u_reduced_by_cyclo.len() - 1 < 2 * DEG {
-        pk0_u_reduced_by_cyclo.insert(0, BigInt::zero());
-    }
-
-    // Pad pk1_u_reduced_by_cyclo with zeroes at the beginning to make its degree equal to 2*DEG (same as quotient_1_times_cyclo)
-    while pk1_u_reduced_by_cyclo.len() - 1 < 2 * DEG {
-        pk1_u_reduced_by_cyclo.insert(0, BigInt::zero());
-    }
+    // Compute the polynomial multiplication between quotient_1 * cyclo outside the circuit
+    let quotient_1_times_cyclo = poly_mul(&quotient_1, &vec_u64_to_vec_bigint(&input.cyclo));
 
     // Precomputation is over, now we can assign the resulting polynomials to the circuit witness table
+
+    // Note: we are still in Phase 0 of the witness generation
 
     // Assign the polynomial pk0_u_unassigned to the circuit
     // Assign the polynomial pk1_u_unassigned to the circuit
@@ -246,8 +236,8 @@ fn bfv_encryption_circuit<F: Field>(
 
     // Using a for loop from 0 to 2 * (DEG - 1) (inclusive) enforces that the degree of pk0_u and pk1_u is equal to 2 * (DEG - 1)
     for i in 0..2 * (DEG - 1) + 1 {
-        let pk0_u_val = big_int_to_fp(&pk0_u_unassigned[i]);
-        let pk1_u_val = big_int_to_fp(&pk1_u_unassigned[i]);
+        let pk0_u_val = big_uint_to_fp(&pk0_u_unassigned[i]);
+        let pk1_u_val = big_uint_to_fp(&pk1_u_unassigned[i]);
         let pk0_u_assigned_value = ctx.load_witness(pk0_u_val);
         let pk1_u_assigned_value = ctx.load_witness(pk1_u_val);
         pk0_u.push(pk0_u_assigned_value);
@@ -265,54 +255,42 @@ fn bfv_encryption_circuit<F: Field>(
     let mut quotient_0_assigned = vec![];
     let mut quotient_1_assigned = vec![];
 
-    // Using a for loop from 0 to DEG (inclusive) enforces that the degree of quotient_0 and quotient_1 is equal to DEG
-    for i in 0..DEG + 1 {
-        let quotient_0_val = big_int_to_fp(&quotient_0[i]);
-        let quotient_1_val = big_int_to_fp(&quotient_1[i]);
+    // Using a for loop from 0 to 2 * DEG - 2 - DEG (inclusive) enforces that the degree of quotient_0 and quotient_1 is equal to 2 * DEG - 2 - DEG
+    for i in 0..2 * DEG - 2 - DEG + 1 {
+        let quotient_0_val = big_uint_to_fp(&quotient_0[i]);
+        let quotient_1_val = big_uint_to_fp(&quotient_1[i]);
         let quotient_0_assigned_value = ctx.load_witness(quotient_0_val);
         let quotient_1_assigned_value = ctx.load_witness(quotient_1_val);
         quotient_0_assigned.push(quotient_0_assigned_value);
         quotient_1_assigned.push(quotient_1_assigned_value);
     }
 
-    assert!(quotient_0_assigned.len() - 1 == DEG);
-    assert!(quotient_1_assigned.len() - 1 == DEG);
+    assert!(quotient_0_assigned.len() - 1 == 2 * DEG - 2 - DEG);
+    assert!(quotient_1_assigned.len() - 1 == 2 * DEG - 2 - DEG);
 
-    // Assign cyclo (and quotient) length to the circuit -> this is equal to DEG + 1
-    let cyclo_len = ctx.load_witness(F::from((DEG + 1) as u64));
+    // assign quotient_0 (and quotient_1) length to the circuit -> this is equal to 2*DEG - 2 - DEG + 1
+    let quotient_len = ctx.load_witness(F::from((2 * DEG - 2 - DEG + 1) as u64));
 
-    // Assign pk0_u_reduced_by_cyclo to the circuit
-    // Assign pk1_u_reduced_by_cyclo to the circuit
     // Assign quotient_0_times_cyclo to the circuit
     // Assign quotient_1_times_cyclo to the circuit
-    let mut pk0_u_reduced_by_cyclo_assigned = vec![];
-    let mut pk1_u_reduced_by_cyclo_assigned = vec![];
     let mut quotient_0_times_cyclo_assigned = vec![];
     let mut quotient_1_times_cyclo_assigned = vec![];
 
-    // Using a for loop from 0 to 2*DEG (inclusive) enforces that the degree of pk0_u_reduced_by_cyclo, pk1_u_reduced_by_cyclo, quotient_0_times_cyclo and quotient_1_times_cyclo is equal to 2*DEG
-    for i in 0..2 * DEG + 1 {
-        let pk0_u_reduced_by_cyclo_val = big_int_to_fp(&pk0_u_reduced_by_cyclo[i]);
-        let pk1_u_reduced_by_cyclo_val = big_int_to_fp(&pk1_u_reduced_by_cyclo[i]);
-        let quotient_0_times_cyclo_val = big_int_to_fp(&quotient_0_times_cyclo[i]);
-        let quotient_1_times_cyclo_val = big_int_to_fp(&quotient_1_times_cyclo[i]);
-        let pk0_u_reduced_by_cyclo_assigned_value = ctx.load_witness(pk0_u_reduced_by_cyclo_val);
-        let pk1_u_reduced_by_cyclo_assigned_value = ctx.load_witness(pk1_u_reduced_by_cyclo_val);
+    // Using a for loop from 0 to 2 * DEG - 2 (inclusive) enforces that the degree of quotient_0_times_cyclo and quotient_1_times_cyclo is equal to 2 * DEG - 2
+    for i in 0..2 * DEG - 2 + 1 {
+        let quotient_0_times_cyclo_val = big_uint_to_fp(&quotient_0_times_cyclo[i]);
+        let quotient_1_times_cyclo_val = big_uint_to_fp(&quotient_1_times_cyclo[i]);
         let quotient_0_times_cyclo_assigned_value = ctx.load_witness(quotient_0_times_cyclo_val);
         let quotient_1_times_cyclo_assigned_value = ctx.load_witness(quotient_1_times_cyclo_val);
-        pk0_u_reduced_by_cyclo_assigned.push(pk0_u_reduced_by_cyclo_assigned_value);
-        pk1_u_reduced_by_cyclo_assigned.push(pk1_u_reduced_by_cyclo_assigned_value);
         quotient_0_times_cyclo_assigned.push(quotient_0_times_cyclo_assigned_value);
         quotient_1_times_cyclo_assigned.push(quotient_1_times_cyclo_assigned_value);
     }
 
-    assert!(pk0_u_reduced_by_cyclo_assigned.len() - 1 == 2 * DEG);
-    assert!(pk1_u_reduced_by_cyclo_assigned.len() - 1 == 2 * DEG);
-    assert!(quotient_0_times_cyclo_assigned.len() - 1 == 2 * DEG);
-    assert!(quotient_1_times_cyclo_assigned.len() - 1 == 2 * DEG);
+    assert!(quotient_0_times_cyclo_assigned.len() - 1 == 2 * DEG - 2);
+    assert!(quotient_1_times_cyclo_assigned.len() - 1 == 2 * DEG - 2);
 
-    // Assign the length of quotient_0_times_cyclo_assigned (or quotient_1_times_cyclo_assigned, pk0_u_reduced_by_cyclo_assigned, pk1_u_reduced_by_cyclo_assigned) to the circuit -> this is equal to 2*DEG + 1
-    let double_deg_len = ctx.load_witness(F::from((2 * DEG + 1) as u64));
+    // Assign the length of the polynomial quotient_0_times_cyclo (and quotient_1_times_cyclo) to the circuit -> this is equal to 2*DEG - 2 + 1
+    let quotient_times_cyclo_len = ctx.load_witness(F::from((2 * DEG - 2 + 1) as u64));
 
     // Phase 0 is over, we can now move to Phase 1, in which we will leverage the random challenge generated during Phase 0.
     // According to the design of this API, all the constraints must be written inside a callback function.
@@ -400,53 +378,6 @@ fn bfv_encryption_circuit<F: Field>(
             range.gate(),
         );
 
-        // Enforce quotient_0 * cyclo = quotient_0_times_cyclo using `constrain_poly_mul` gate
-        constrain_poly_mul(
-            quotient_0_assigned,
-            cyclo_len,
-            cyclo.clone(),
-            cyclo_len,
-            quotient_0_times_cyclo_assigned.clone(),
-            double_deg_len,
-            ctx_gate,
-            ctx_rlc,
-            rlc,
-            range.gate(),
-        );
-
-        // Enforce quotient_0_times_cyclo + pk0_u_reduced_by_cyclo = expected_pk0_u using `poly_add` gate
-        let expected_pk0_u = poly_add::<{ 2 * DEG }, F>(
-            ctx_gate,
-            &quotient_0_times_cyclo_assigned,
-            &pk0_u_reduced_by_cyclo_assigned,
-            range.gate(),
-        );
-
-        // Now the degree of expected_pk0_u is 2*DEG. While the degree of pk0_u is 2*DEG - 2.
-        // We have to trim the first two coefficients of expected_pk0_u to make its degree equal to 2*DEG - 2.
-        // Before doing that, we need to assert that the first two coefficients of expected_pk0_u are zeroes.
-        for expected_pk0_u_element in expected_pk0_u.iter().take(2) {
-            let bool =
-                range
-                    .gate()
-                    .is_equal(ctx_gate, *expected_pk0_u_element, Constant(F::from(0)));
-            range.gate().assert_is_const(ctx_gate, &bool, &F::from(1));
-        }
-
-        // Now, we can safely trim the first 2 coefficients from expected_pk0_u
-        let expected_pk0_u_trimmed: Vec<_> = expected_pk0_u.iter().skip(2).cloned().collect();
-
-        assert_eq!(expected_pk0_u_trimmed.len() - 1, 2 * DEG - 2);
-        assert_eq!(pk0_u.len() - 1, 2 * DEG - 2);
-
-        // Enforce that expected_pk0_u_trimmed = pk0_u using equality constraint
-        for i in 0..2 * DEG - 1 {
-            let bool = range
-                .gate()
-                .is_equal(ctx_gate, expected_pk0_u_trimmed[i], pk0_u[i]);
-            range.gate().assert_is_const(ctx_gate, &bool, &F::from(1));
-        }
-
         // pk0_u is a polynomial of degree (DEG - 1) * 2 = 2*DEG - 2
         // pk0_u has coefficients in the [0, (Q-1) * (Q-1) * DEG] range
 
@@ -455,8 +386,8 @@ fn bfv_encryption_circuit<F: Field>(
         // get the number of bits needed to represent the value of (Q-1) * (Q-1) * DEG
 
         // get the number of bits needed to represent the value of (Q-1) * (Q-1) * DEG
-        let q = BigUint::from(Q as u64);
-        let deg = BigUint::from(DEG as u64);
+        let q = BigInt::from(Q as u64);
+        let deg = BigInt::from(DEG as u64);
         let q_minus_1 = q - 1u64;
         let binary_representation = format!("{:b}", (q_minus_1.clone() * q_minus_1 * deg));
 
@@ -479,8 +410,19 @@ fn bfv_encryption_circuit<F: Field>(
         // - The coefficients of dividend and divisor can be expressed as u64 values as long as Q - 1 is less than 2^64
         // - Q is chosen such that (Q-1) * (2 * DEG - 2 - DEG + 1)] + Q-1 < p. Note that this is a subset of the condition (Q-1) * (Q-1) * DEG < p which is an assumption of the circuit.
 
-        let pk0_u =
-            poly_divide_by_cyclo::<{ 2 * DEG - 2 }, DEG, Q, F>(ctx_gate, &pk0_u, &cyclo, range);
+        let pk0_u = poly_divide_by_cyclo::<{ 2 * DEG - 2 }, DEG, Q, F>(
+            &pk0_u,
+            &cyclo,
+            cyclo_len,
+            &quotient_0_assigned,
+            quotient_len,
+            &quotient_0_times_cyclo_assigned,
+            quotient_times_cyclo_len,
+            range,
+            ctx_gate,
+            ctx_rlc,
+            rlc,
+        );
 
         // assert that the degree of pk0_u is 2*DEG - 2
 
@@ -655,54 +597,6 @@ fn bfv_encryption_circuit<F: Field>(
             rlc,
             range.gate(),
         );
-
-        // Enforce quotient_1 * cyclo = quotient_1_times_cyclo using `constrain_poly_mul` gate
-        constrain_poly_mul(
-            quotient_1_assigned,
-            cyclo_len,
-            cyclo.clone(),
-            cyclo_len,
-            quotient_1_times_cyclo_assigned.clone(),
-            double_deg_len,
-            ctx_gate,
-            ctx_rlc,
-            rlc,
-            range.gate(),
-        );
-
-        // Enforce quotient_1_times_cyclo + pk1_u_reduced_by_cyclo = expected_pk1_u using `poly_add` gate
-        let expected_pk1_u = poly_add::<{ 2 * DEG }, F>(
-            ctx_gate,
-            &quotient_1_times_cyclo_assigned,
-            &pk1_u_reduced_by_cyclo_assigned,
-            range.gate(),
-        );
-
-        // Now the degree of expected_pk1_u is 2*DEG. While the degree of pk1_u is 2*DEG - 2.
-        // We have to trim the first two coefficients of expected_pk1_u to make its degree equal to 2*DEG - 2.
-        // Before doing that, we need to assert that the first two coefficients of expected_pk1_u are zeroes.
-        for expected_pk1_u_element in expected_pk1_u.iter().take(2) {
-            let bool =
-                range
-                    .gate()
-                    .is_equal(ctx_gate, *expected_pk1_u_element, Constant(F::from(0)));
-            range.gate().assert_is_const(ctx_gate, &bool, &F::from(1));
-        }
-
-        // Now, we can safely trim the first 2 coefficients from expected_pk1_u
-        let expected_pk1_u_trimmed: Vec<_> = expected_pk1_u.iter().skip(2).cloned().collect();
-
-        assert_eq!(expected_pk1_u_trimmed.len() - 1, 2 * DEG - 2);
-        assert_eq!(pk1_u.len() - 1, 2 * DEG - 2);
-
-        // Enforce that expected_pk1_u_trimmed = pk1_u using equality constraint
-        for i in 0..2 * DEG - 1 {
-            let bool = range
-                .gate()
-                .is_equal(ctx_gate, expected_pk1_u_trimmed[i], pk1_u[i]);
-            range.gate().assert_is_const(ctx_gate, &bool, &F::from(1));
-        }
-
         // pk1_u is a polynomial of degree (DEG - 1) * 2 = 2*DEG - 2
         // pk1_u has coefficients in the [0, (Q-1) * (Q-1) * DEG] range
 
@@ -725,8 +619,19 @@ fn bfv_encryption_circuit<F: Field>(
         // - The coefficients of dividend and divisor can be expressed as u64 values as long as Q - 1 is less than 2^64
         // - Q is chosen such that (Q-1) * (2 * DEG - 2 - DEG + 1)] + Q-1 < p. Note that this is a subset of the condition (Q-1) * (Q-1) * DEG < p which is an assumption of the circuit.
 
-        let pk1_u =
-            poly_divide_by_cyclo::<{ 2 * DEG - 2 }, DEG, Q, F>(ctx_gate, &pk1_u, &cyclo, range);
+        let pk1_u = poly_divide_by_cyclo::<{ 2 * DEG - 2 }, DEG, Q, F>(
+            &pk1_u,
+            &cyclo,
+            cyclo_len,
+            &quotient_1_assigned,
+            quotient_len,
+            &quotient_1_times_cyclo_assigned,
+            quotient_times_cyclo_len,
+            range,
+            ctx_gate,
+            ctx_rlc,
+            rlc,
+        );
 
         // assert that the degree of pk1_u is 2*DEG - 2
 
@@ -749,7 +654,6 @@ fn bfv_encryption_circuit<F: Field>(
         // assert that the degree of pk1_u_trimmed is DEG - 1
 
         assert_eq!(pk1_u_trimmed.len() - 1, DEG - 1);
-
         // pk1_u_trimmed is a polynomial in the R_q ring!
 
         // c1 = pk1_u_trimmed + e1
