@@ -21,52 +21,59 @@ use zk_fhe::chips::utils::{big_uint_to_fp, poly_mul};
 /// * `DEG`: Degree of the cyclotomic polynomial `cyclo` of the polynomial ring R_q.
 /// * `Q`: Modulus of the cipher text field
 /// * `T`: Modulus of the plaintext field
-/// * `B`: Upper bound of the Gaussian distribution Chi Error. It is defined as 6 * sigma
+/// * `B`: Upper bound of the Gaussian distribution Chi Error. It is defined as 6 * 𝜎
 ///
 /// # Fields
 ///
-/// * `pk0`: Public key 0 polynomial coefficients of degree DEG-1 [a_DEG-1, a_DEG-2, ..., a_1, a_0] where a_0 is the constant term
-/// * `pk1`: Public key 1 polynomial coefficients of degree DEG-1 [a_DEG-1, a_DEG-2, ..., a_1, a_0] where a_0 is the constant term
-/// * `m`: Plaintext polynomial of degree DEG-1 [a_DEG-1, a_DEG-2, ..., a_1, a_0] where a_0 is the constant term. Represents the message to be encrypted
-/// * `u`: Ephemeral key polynomial coefficients from the distribution ChiKey [a_DEG-1, a_DEG-2, ..., a_1, a_0]
-/// * `e0`: Error polynomial coefficients from the distribution ChiError [a_DEG-1, a_DEG-2, ..., a_1, a_0]
-/// * `e1`: Error polynomial coefficients from the distribution ChiError [a_DEG-1, a_DEG-2, ..., a_1, a_0]
-/// * `c0`: First ciphertext component polynomial coefficients of degree DEG-1 [a_DEG-1, a_DEG-2, ..., a_1, a_0] where a_0 is the constant term
-/// * `c1`: Second ciphertext component polynomial coefficients of degree DEG-1 [a_DEG-1, a_DEG-2, ..., a_1, a_0] where a_0 is the constant term
-
-/// # Assumptions (to be checked outside the circuit)
+/// * `pk0`: Public key 0 - polynomial of degree DEG-1 living in ciphertext space R_q
+/// * `pk1`: Public key 1 - polynomial of degree DEG-1 living in ciphertext space R_q
+/// * `m`: Plaintext message to be encrypted - polynomial of degree DEG-1 living in plaintext space R_t
+/// * `u`: Ephemeral key - polynomial of degree DEG-1 living in ciphertext space R_q - its coefficients are sampled from the distribution ChiKey
+/// * `e0`: Error - polynomial of degree DEG-1 living in ciphertext space R_q - its coefficients are sampled from the distribution ChiError
+/// * `e1`: Error - polynomial of degree DEG-1 living in ciphertext space R_q - its coefficients are sampled from the distribution ChiError
+/// * `c0`: First ciphertext component - polynomial of degree DEG-1 living in ciphertext space R_q
+/// * `c1`: Second ciphertext component - polynomial of degree DEG-1 living in ciphertext space R_q
+///
+/// Note: all the polynomials are expressed by their coefficients in the form [a_DEG-1, a_DEG-2, ..., a_1, a_0] where a_0 is the constant term
+///
+/// # Assumptions (to be checked on the public inputs outside the circuit)
 ///
 /// * `DEG` must be a power of 2
 /// * `Q` must be a prime number and be greater than 1.
-/// * `Q` must be less than 2^64
 /// * `Q` is less than (Q-1) * (Q-1) * DEG < p where p is the prime field of the circuit
 /// * `T` must be a prime number and must be greater than 1 and less than `Q`
 /// * `B` must be a positive integer and must be less than `Q`
-/// * `cyclo` must be the cyclotomic polynomial of degree `DEG` => x^DEG + 1 (this is a public output of the circuit)
+/// * `cyclo` must be the cyclotomic polynomial of degree `DEG` in the form x^DEG + 1 (this is a public output of the circuit)
 /// * `pk0` and `pk1` must be polynomials in the R_q ring. The ring R_q is defined as R_q = Z_q[x]/(x^DEG + 1)
 
 // For real world applications, the parameters should be chosen according to the security level required.
 // DEG and Q Parameters of the BFV encryption scheme should be chosen according to TABLES of RECOMMENDED PARAMETERS for 128-bits security level
 // https://homomorphicencryption.org/wp-content/uploads/2018/11/HomomorphicEncryptionStandardv1.1.pdf
 // B is the upper bound of the distribution Chi Error. Pick standard deviation 𝜎 ≈ 3.2 according to the HomomorphicEncryptionStandardv1 paper.
-// T should be be picked according to Lattigo (https://github.com/tuneinsight/lattigo/blob/master/bfv/params.go) implementation
+// T is picked according to Lattigo (https://github.com/tuneinsight/lattigo/blob/master/schemes/bfv/example_parameters.go) implementation
 // As suggest by https://eprint.iacr.org/2021/204.pdf (paragraph 2) B = 6σerr
-// These are just parameters used for fast testing
-const DEG: usize = 1024;
-const Q: u64 = 536870909;
+// These are just parameters used for fast testing purpose - to match with input file `data/bfv.in`
+const DEG: usize = 4;
+const Q: u64 = 4637;
 const T: u64 = 7;
 const B: u64 = 18;
 
+// // These are the parameters used for the real world application - to match with input file `data/bfv_2.in`
+// const DEG: usize = 1024;
+// const Q: u64 = 536870909;
+// const T: u64 = 65537;
+// const B: u64 = 18;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CircuitInput<const DEG: usize, const Q: u64, const T: u64, const B: u64> {
-    pub pk0: Vec<u64>, // polynomial coefficients [a_DEG-1, a_DEG-2, ..., a_1, a_0] where a_0 is the constant term. PUBLIC. Should live in R_q according to assumption
-    pub pk1: Vec<u64>, // polynomial coefficients [a_DEG-1, a_DEG-2, ..., a_1, a_0] where a_0 is the constant term. PUBLIC. Should live in R_q according to assumption
-    pub m: Vec<u64>, // polynomial coefficients [a_DEG-1, a_DEG-2, ..., a_1, a_0] where a_0 is the constant term. PRIVATE. Should in R_t (enforced inside the circuit)
-    pub u: Vec<u64>, // polynomial coefficients [a_DEG-1, a_DEG-2, ..., a_1, a_0] where a_0 is the constant term. PRIVATE. Should live in R_q and be sampled from the distribution ChiKey (checked inside the circuit)
-    pub e0: Vec<u64>, // polynomial coefficients [a_DEG-1, a_DEG-2, ..., a_1, a_0] where a_0 is the constant term. PRIVATE. Should live in R_q and be sampled from the distribution ChiError (checked inside the circuit)
-    pub e1: Vec<u64>, // polynomial coefficients [a_DEG-1, a_DEG-2, ..., a_1, a_0] where a_0 is the constant term. PRIVATE. Should live in R_q and be sampled from the distribution ChiError (checked inside the circuit)
-    pub c0: Vec<u64>, // polynomial coefficients [a_DEG-1, a_DEG-2, ..., a_1, a_0] where a_0 is the constant term. PUBLIC. Should live in R_q. We constraint equality between c0 and computed_c0 namely the ciphertext generated by the circuit
-    pub c1: Vec<u64>, // polynomial coefficients [a_DEG-1, a_DEG-2, ..., a_1, a_0] where a_0 is the constant term. PUBLIC. Should live in R_q. We constraint equality between c1 and computed_c1 namely the ciphertext generated by the circuit
+    pub pk0: Vec<u64>, // PUBLIC INPUT. Should live in R_q according to assumption
+    pub pk1: Vec<u64>, // PUBLIC INPUT. Should live in R_q according to assumption
+    pub m: Vec<u64>,   // PRIVATE INPUT. Should in R_t (enforced inside the circuit)
+    pub u: Vec<u64>, // PRIVATE INPUT. Should live in R_q and be sampled from the distribution ChiKey (enforced inside the circuit)
+    pub e0: Vec<u64>, // PRIVATE INPUT. Should live in R_q and be sampled from the distribution ChiError (enforced inside the circuit)
+    pub e1: Vec<u64>, // PRIVATE INPUT. Should live in R_q and be sampled from the distribution ChiError (enforced inside the circuit)
+    pub c0: Vec<u64>, // PUBLIC INPUT. Should live in R_q. We constraint equality between c0 and computed_c0 namely the ciphertext generated by the circuit
+    pub c1: Vec<u64>, // PUBLIC INPUT. Should live in R_q. We constraint equality between c1 and computed_c1 namely the ciphertext generated by the circuit
 }
 
 fn bfv_encryption_circuit<F: Field>(
@@ -76,7 +83,7 @@ fn bfv_encryption_circuit<F: Field>(
     input: CircuitInput<DEG, Q, T, B>,
     make_public: &mut Vec<AssignedValue<F>>,
 ) -> impl FnOnce(&mut Context<F>, &mut Context<F>, &EthChip<F>) + Clone {
-    // assert that the input polynomials have the same degree and this is equal to DEG - 1
+    // assert that the input polynomials have the same degree and this is equal to DEG - 1. Note: this is not a constraint enforced inside the circuit
     assert_eq!(input.pk0.len() - 1, DEG - 1);
     assert_eq!(input.pk1.len() - 1, DEG - 1);
     assert_eq!(input.m.len() - 1, DEG - 1);
@@ -97,10 +104,11 @@ fn bfv_encryption_circuit<F: Field>(
 
     // The circuit logic requires to access some random value
     // In order to draw randomness within the circuit we use Axiom's Challenge API (https://hackmd.io/@axiom/SJw3p-qX3)
-    // Challenge API requires a Phase 0 of witness generation. A commitment from the witness generated during Phase 0 is then hashed to generate the random value according to Fiat-Shamir heuristic.
+    // Challenge API requires a Phase 0 of witness generation. During this phase, all the input polynomials are assigned to the circuit witness table.
+    // A commitment from the witness generated during Phase 0 is extracted and then hashed to generate the random value according to Fiat-Shamir heuristic.
     // This random challenge can be then used as part of witness generation during Phase 1. We will need this to perform efficient polynomial multiplication.
-    // Note that if you wanna verify something with the challenge API (eg enforcing polynomial multiplcation)
-    // the stuffs you verify (namely the input polynomials) must be assigned in phase 0 so their values can be part of the Phase 0 commtiment and contribute to Gamma.
+    // Note that if you wanna verify something with the challenge API (eg enforcing polynomial multiplcation), the stuffs you verify (namely the input polynomials)
+    // must be assigned in phase 0 so their values can be part of the Phase 0 commtiment and contribute to Gamma.
 
     // Phase 0: Assign the input polynomials to the circuit witness table
     // Using a for loop from 0 to DEG - 1 enforces that the assigned input polynomials have the same degree and this is equal to DEG - 1
@@ -133,18 +141,9 @@ fn bfv_encryption_circuit<F: Field>(
         c1.push(c1_assigned_value);
     }
 
-    assert!(pk0.len() - 1 == DEG - 1);
-    assert!(pk1.len() - 1 == DEG - 1);
-    assert!(u.len() - 1 == DEG - 1);
-    assert!(m.len() - 1 == DEG - 1);
-    assert!(e0.len() - 1 == DEG - 1);
-    assert!(e1.len() - 1 == DEG - 1);
-    assert!(c0.len() - 1 == DEG - 1);
-    assert!(c1.len() - 1 == DEG - 1);
-
     const DELTA: u64 = Q / T; // Q/T rounded to the lower integer
 
-    // Assign the cyclotomic polynomial to the circuit -> x^DEG + 1
+    // Assign the cyclotomic polynomial to the circuit. This has form -> x^DEG + 1
     // Performing the assignemnt for the index 0, using a for loop from 1 to DEG - 1, and performing the assignment for the index DEG enforces that:
     // - the degree of the polynomial is DEG
     // - the leading coefficient is 1
@@ -168,19 +167,18 @@ fn bfv_encryption_circuit<F: Field>(
 
     assert!(cyclo.len() - 1 == DEG);
 
-    // Assign the length of the input polynomials pk0 and u to the circuit. This is equal to DEG
+    // Assign the length of the input polynomials pk0, pk1 and u to the circuit. This is equal to DEG
     let poly_len = ctx.load_witness(F::from(DEG as u64));
 
     // Compute the polynomial pk0 * u outside the circuit
     let pk0_u_u64 = poly_mul(&input.pk0, &input.u);
-
     // Assign the polynomial pk0_u_u64 to the circuit
     let mut pk0_u = vec![];
 
     // This should be a polynomial of degree 2*(DEG - 1)
     // Using a for loop from 0 to 2*(DEG - 1) enforces that pk0_u has degree equal to 2*(DEG - 1)
     for item in pk0_u_u64.iter().take(2 * (DEG - 1) + 1) {
-        let pk0_u_val = big_uint_to_fp(&item);
+        let pk0_u_val = big_uint_to_fp(item);
         let pk0_u_assigned_value = ctx.load_witness(pk0_u_val);
         pk0_u.push(pk0_u_assigned_value);
     }
@@ -199,7 +197,7 @@ fn bfv_encryption_circuit<F: Field>(
     // This should be a polynomial of degree 2*(DEG - 1)
     // Using a for loop from 0 to 2*(DEG - 1) enforces that pk1_u has degree equal to 2*(DEG - 1)
     for item in pk1_u_u64.iter().take(2 * (DEG - 1) + 1) {
-        let pk1_u_val = big_uint_to_fp(&item);
+        let pk1_u_val = big_uint_to_fp(item);
         let pk1_u_assigned_value = ctx.load_witness(pk1_u_val);
         pk1_u.push(pk1_u_assigned_value);
     }
@@ -240,7 +238,7 @@ fn bfv_encryption_circuit<F: Field>(
 
         /* constraint on e0
             - e0 must be a polynomial in the R_q ring => Coefficients must be in the [0, Q-1] range and the degree of e0 must be DEG - 1
-            - e0 must be sampled from the distribution ChiError
+            - e0 must be sampled from the distribution ChiError, namely the coefficients of e0 must be in the [0, b] OR [q-b, q-1] range
 
             Approach:
             - `check_poly_from_distribution_chi_error` chip guarantees that the coefficients of e0 are in the range [0, b] OR [q-b, q-1]
@@ -258,7 +256,7 @@ fn bfv_encryption_circuit<F: Field>(
 
         /* constraint on u
             - u must be a polynomial in the R_q ring => Coefficients must be in the [0, Q-1] range and the degree of u must be DEG - 1
-            - u must be sampled from the distribution ChiKey
+            - u must be sampled from the distribution ChiKey, namely the coefficients of u must be either 0, 1 or Q-1
 
             Approach:
             - `check_poly_from_distribution_chi_key` chip guarantees that the coefficients of u are either 0, 1 or Q-1
