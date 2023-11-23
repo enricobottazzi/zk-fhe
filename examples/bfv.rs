@@ -4,7 +4,8 @@ use clap::Parser;
 use halo2_base::safe_types::{GateInstructions, RangeInstructions};
 use halo2_base::{AssignedValue, Context, QuantumCell::Constant};
 use halo2_scaffold::scaffold::{cmd::Cli, run_eth};
-use num_bigint::BigUint;
+use num_bigint::{BigInt, BigUint};
+use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use zk_fhe::chips::poly_distribution::{
     check_poly_coefficients_in_range, check_poly_from_distribution_chi_key,
@@ -12,7 +13,7 @@ use zk_fhe::chips::poly_distribution::{
 use zk_fhe::chips::poly_operations::{
     constrain_poly_mul, poly_add, poly_divide_by_cyclo, poly_reduce, poly_scalar_mul,
 };
-use zk_fhe::chips::utils::{big_int_to_fp, poly_mul, vec_u64_to_vec_big_int};
+use zk_fhe::chips::utils::{big_int_to_fp, div_euclid_big_int, poly_mul, vec_u64_to_vec_big_int};
 
 /// Circuit inputs for BFV encryption operations
 ///
@@ -113,7 +114,7 @@ fn bfv_encryption_circuit<F: Field>(
     // must be assigned in phase 0 so their values can be part of the Phase 0 commtiment and contribute to Gamma.
 
     // Phase 0: Assign the input polynomials to the circuit witness table
-    // Using a for loop from 0 to DEG - 1 enforces that the assigned input polynomials have the same degree and this is equal to DEG - 1
+    // Using a for loop from 0 to DEG - 1 (inclusive) enforces that the assigned input polynomials have the same degree and this is equal to DEG - 1
     for i in 0..DEG {
         let pk0_val = F::from(input.pk0[i]);
         let pk1_val = F::from(input.pk1[i]);
@@ -146,7 +147,7 @@ fn bfv_encryption_circuit<F: Field>(
     const DELTA: u64 = Q / T; // Q/T rounded to the lower integer
 
     // Assign the cyclotomic polynomial to the circuit from the input
-    // Using a for loop from 0 to DEG enforces that the assigned cyclo polynomials have degree DEG
+    // Using a for loop from 0 to DEG (inclusive) enforces that the assigned cyclo polynomials have degree DEG
     for i in 0..DEG + 1 {
         let cyclo_val = F::from(input.cyclo[i]);
         cyclo.push(ctx.load_witness(cyclo_val));
@@ -156,47 +157,6 @@ fn bfv_encryption_circuit<F: Field>(
 
     // Assign the length of the input polynomials pk0, pk1 and u to the circuit. This is equal to DEG
     let poly_len = ctx.load_witness(F::from(DEG as u64));
-
-    // Compute the polynomial pk0 * u outside the circuit
-    let pk0_u_unassigned = poly_mul(
-        &vec_u64_to_vec_big_int(&input.pk0),
-        &vec_u64_to_vec_big_int(&input.u),
-    );
-
-    // Assign the polynomial pk0_u_unassigned to the circuit
-    let mut pk0_u = vec![];
-
-    // This should be a polynomial of degree 2*(DEG - 1)
-    // Using a for loop from 0 to 2*(DEG - 1) enforces that pk0_u has degree equal to 2*(DEG - 1)
-    for item in pk0_u_unassigned.iter().take(2 * (DEG - 1) + 1) {
-        let pk0_u_val = big_int_to_fp(item);
-        let pk0_u_assigned_value = ctx.load_witness(pk0_u_val);
-        pk0_u.push(pk0_u_assigned_value);
-    }
-
-    assert!(pk0_u.len() - 1 == 2 * (DEG - 1));
-
-    // Assign the length of the polynomial pk0_u to the circuit -> this is equal to 2*(DEG - 1) + 1
-    let pk_u_len = ctx.load_witness(F::from((2 * (DEG - 1) + 1) as u64));
-
-    // Compute the polynomial pk1 * u outside the circuit
-    let pk1_u_unassigned = poly_mul(
-        &vec_u64_to_vec_big_int(&input.pk1),
-        &vec_u64_to_vec_big_int(&input.u),
-    );
-
-    // Assign the polynomial pk1_u_unassigned to the circuit
-    let mut pk1_u = vec![];
-
-    // This should be a polynomial of degree 2*(DEG - 1)
-    // Using a for loop from 0 to 2*(DEG - 1) enforces that pk1_u has degree equal to 2*(DEG - 1)
-    for item in pk1_u_unassigned.iter().take(2 * (DEG - 1) + 1) {
-        let pk1_u_val = big_int_to_fp(item);
-        let pk1_u_assigned_value = ctx.load_witness(pk1_u_val);
-        pk1_u.push(pk1_u_assigned_value);
-    }
-
-    assert!(pk1_u.len() - 1 == 2 * (DEG - 1));
 
     // Expose to the public pk0 and pk1
     for &assigned_coefficient_pk0 in pk0.iter().take(DEG) {
@@ -220,6 +180,73 @@ fn bfv_encryption_circuit<F: Field>(
     for &assigned_coefficient_cyclo in cyclo.iter().take(DEG + 1) {
         make_public.push(assigned_coefficient_cyclo);
     }
+
+    // PRECOMPUTATION
+    // In this section we perform some precomputations outside the circuit
+    // The resulting polynomials are then assigned to the circuit witness table
+
+    // Compute the polynomial pk0 * u outside the circuit
+    let pk0_u_unassigned = poly_mul(
+        &vec_u64_to_vec_big_int(&input.pk0),
+        &vec_u64_to_vec_big_int(&input.u),
+    );
+
+    // Compute the polynomial pk1 * u outside the circuit
+    let pk1_u_unassigned = poly_mul(
+        &vec_u64_to_vec_big_int(&input.pk1),
+        &vec_u64_to_vec_big_int(&input.u),
+    );
+
+    // Compute pk0_unassigned / cyclo outside the circuit
+    let (mut quotient_0, pk0_redced_by_cyclo) = div_euclid_big_int::<{ 2 * (DEG - 1) }, DEG, F>(
+        &pk0_u_unassigned,
+        &vec_u64_to_vec_big_int(&input.cyclo),
+    );
+
+    // Compute pk1_unassigned / cyclo outside the circuit
+    let (mut quotient_1, pk1_redced_by_cyclo) = div_euclid_big_int::<{ 2 * (DEG - 1) }, DEG, F>(
+        &pk1_u_unassigned,
+        &vec_u64_to_vec_big_int(&input.cyclo),
+    );
+
+    // pad quotient_0 with zeroes at the beginning to make its degree equal to DEG (same as cyclo)
+    while quotient_0.len() - 1 < DEG {
+        quotient_0.insert(0, BigInt::zero());
+    }
+
+    // pad quotient_1 with zeroes at the beginning to make its degree equal to DEG (same as cyclo)
+    while quotient_1.len() - 1 < DEG {
+        quotient_1.insert(0, BigInt::zero());
+    }
+
+    // Compute quotient_0 * cyclo outside the circuit
+    let quotient_0_times_cyclo = poly_mul(&quotient_0, &vec_u64_to_vec_big_int(&input.cyclo));
+
+    // Compute quotient_1 * cyclo outside the circuit
+    let quotient_1_times_cyclo = poly_mul(&quotient_1, &vec_u64_to_vec_big_int(&input.cyclo));
+
+    // Precomputation is over, now we can assign the resulting polynomials to the circuit witness table
+
+    // Assign the polynomial pk0_u_unassigned to the circuit
+    // Assign the polynomial pk1_u_unassigned to the circuit
+    let mut pk0_u = vec![];
+    let mut pk1_u = vec![];
+
+    // Using a for loop from 0 to 2 * (DEG - 1) (inclusive) enforces that the degree of pk0_u and pk1_u is equal to 2 * (DEG - 1)
+    for i in 0..2 * (DEG - 1) + 1 {
+        let pk0_u_val = big_int_to_fp(&pk0_u_unassigned[i]);
+        let pk1_u_val = big_int_to_fp(&pk1_u_unassigned[i]);
+        let pk0_u_assigned_value = ctx.load_witness(pk0_u_val);
+        let pk1_u_assigned_value = ctx.load_witness(pk1_u_val);
+        pk0_u.push(pk0_u_assigned_value);
+        pk1_u.push(pk1_u_assigned_value);
+    }
+
+    assert!(pk0_u.len() - 1 == 2 * (DEG - 1));
+    assert!(pk1_u.len() - 1 == 2 * (DEG - 1));
+
+    // Assign the length of the polynomial pk0_u to the circuit -> this is equal to 2*(DEG - 1) + 1
+    let pk_u_len = ctx.load_witness(F::from((2 * (DEG - 1) + 1) as u64));
 
     // Phase 0 is over, we can now move to Phase 1, in which we will leverage the random challenge generated during Phase 0.
     // According to the design of this API, all the constraints must be written inside a callback function.
