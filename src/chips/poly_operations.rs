@@ -14,7 +14,7 @@ use num_bigint::BigInt;
 ///
 /// * DEG is the degree of the input polynomials
 /// * Input polynomials are parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
-/// * It assumes that the coefficients are constrained such to overflow during the polynomial addition
+/// * Assumption: the coefficients are constrained such to avoid overflow during the polynomial addition
 pub fn poly_add<const DEG: usize, F: Field>(
     ctx: &mut Context<F>,
     a: &Vec<AssignedValue<F>>,
@@ -50,6 +50,8 @@ pub fn poly_add<const DEG: usize, F: Field>(
 /// This algorithm takes O(N) constraints as it requires to:
 /// - Evaluate the polynomials a, b and c at gamma (3N constraints)
 /// - Enforce the identity a(gamma) * b(gamma) - c(gamma) = 0 (1 constraint)
+///
+/// Assumption: the coefficients are constrained such to avoid overflow during the polynomial multiplication
 pub fn constrain_poly_mul<F: Field>(
     a_assigned_with_length: PolyWithLength<F>,
     b_assigned_with_length: PolyWithLength<F>,
@@ -100,7 +102,7 @@ pub fn constrain_poly_mul<F: Field>(
 ///
 /// * DEG is the degree of the polynomial
 /// * Input polynomial is parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
-/// * It assumes that the coefficients are constrained such to overflow during the scalar multiplication
+/// * Assumption: the coefficients are constrained such to avoid overflow during the polynomial multiplication
 pub fn poly_scalar_mul<const DEG: usize, F: Field>(
     ctx: &mut Context<F>,
     a: &Vec<AssignedValue<F>>,
@@ -208,6 +210,9 @@ pub fn poly_big_int_assign<const DEG: usize, F: Field>(
 /// * DEG_DVD is the degree of the dividend polynomial (poly)
 /// * DEG_DVS is the degree of the divisor polynomial (cyclo)
 /// * Q is the modulus of the ring R_q (cipher text space)
+///
+/// Assumption: the coefficients are constrained such to avoid overflow during the polynomial multiplication between `quotient` and `cyclo`
+/// Assumption: the coefficients are constrained such to avoid overflow during the polynomial addition between `quotient_times_cyclo` and `remainder`
 pub fn constraint_poly_reduction_by_cyclo<
     const DEG_DVD: usize,
     const DEG_DVS: usize,
@@ -239,7 +244,7 @@ pub fn constraint_poly_reduction_by_cyclo<
     // The coefficients of poly are in the range [0, Q - 1] by assumption.
     // The leading coefficient of divisor is 1 by assumption.
     // Therefore, the coefficients of quotient have to be in the range [0, Q - 1]
-    // Since the quotient is computed outside the circuit, we need to enforce this constraint
+    // Since the quotient is computed outside the circuit and then assigned to the circuit, we need to enforce this constraint
     for i in 0..DEG_DVD - DEG_DVS + 1 {
         range.check_less_than_safe(ctx_gate, quotient.assigned_poly[i], Q);
     }
@@ -251,7 +256,7 @@ pub fn constraint_poly_reduction_by_cyclo<
     // It follows that the coefficients of quotient * divisor are in the range [0, Q - 1]
     // The remainder (as result dividend - (quotient * divisor)) might have coefficients that are negative. In that case we add Q to them to make them positive.
     // Therefore, the coefficients of remainder are in the range [0, Q - 1]
-    // Since the remainder is computed outside the circuit, we need to enforce this constraint
+    // Since the remainder is computed outside the circuit and then assigned to the circuit, we need to enforce this constraint
     for i in 0..DEG_DVD + 1 {
         range.check_less_than_safe(ctx_gate, remainder.assigned_poly[i], Q);
     }

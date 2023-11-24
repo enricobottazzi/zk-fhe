@@ -35,6 +35,7 @@ use zk_fhe::chips::PolyWithLength;
 /// * `e1`: Error - polynomial of degree DEG-1 living in ciphertext space R_q - its coefficients are sampled from the distribution ChiError
 /// * `c0`: First ciphertext component - polynomial of degree DEG-1 living in ciphertext space R_q
 /// * `c1`: Second ciphertext component - polynomial of degree DEG-1 living in ciphertext space R_q
+/// * `cyclo`: Cyclotomic polynomial of degree DEG in the form x^DEG + 1
 ///
 /// Note: all the polynomials are expressed by their coefficients in the form [a_DEG-1, a_DEG-2, ..., a_1, a_0] where a_0 is the constant term
 ///
@@ -42,7 +43,7 @@ use zk_fhe::chips::PolyWithLength;
 ///
 /// * `DEG` must be a power of 2
 /// * `Q` must be a prime number and be greater than 1.
-/// * `Q` is less than (Q-1) * (Q-1) * DEG < p where p is the prime field of the circuit
+/// * `Q` is less than (Q-1) * (Q-1) * DEG < p where p is the prime field of the circuit.
 /// * `T` must be a prime number and must be greater than 1 and less than `Q`
 /// * `B` must be a positive integer and must be less than `Q`
 /// * `cyclo` must be the cyclotomic polynomial of degree `DEG` in the form x^DEG + 1
@@ -60,7 +61,7 @@ use zk_fhe::chips::PolyWithLength;
 // const T: u64 = 7;
 // const B: u64 = 18;
 
-// // These are the parameters used for the real world application - to match with input file `data/bfv_2.in`
+// These are the parameters used for the real world application - to match with input file `data/bfv_2.in`
 const DEG: usize = 1024;
 const Q: u64 = 536870909;
 const T: u64 = 7;
@@ -318,16 +319,17 @@ fn bfv_encryption_circuit<F: Field>(
         // Constrain the polynomial multiplication between pk0 and u to be equal to pk0_u using the `constrain_poly_mul` chip
 
         // COEFFICIENTS OVERFLOW ANALYSIS
+        // The assumption of the chip is that the coefficients are constrained such to avoid overflow during the polynomial multiplication
         // The coefficients of pk0 are in the range [0, Q-1] according to the assumption of the circuit
         // The coefficients of u are either 0, 1 or Q-1 according to the constraint set above.
-        // The coefficients of pk0_u are calculated as $c_{k} = \sum_{i=0}^{k} pk0[i] * u[k - i]$. Where k is the index of the coefficient c of pk0_u.
+        // The coefficients of pk0_u are $c_{k} = \sum_{i=0}^{k} pk0[i] * u[k - i]$. Where k is the index of the coefficient c of pk0_u.
         // For two polynomials of the same degree n, the maximum number of multiplications in the sum is for k = n. Namely for the coefficient c_n.
         // The number of multiplications in the sum for the coefficient c_n is n + 1.
         // Given that the input polynomials are of degree DEG - 1, the maximum number of multiplications in the sum is for k = DEG - 1.
         // In that case there are max DEG multiplications in the sum.
         // It follows that the maximum value that a coefficient of pk0_u can have is (Q-1) * (Q-1) * DEG.
         // Q needs to be chosen such that (Q-1) * (Q-1) * DEG < p where p is the prime field of the circuit in order to avoid overflow during the polynomial multiplication.
-        // (Q-1) * (Q-1) * DEG < p according to the assumption of the circuit.
+        // Under this assumption, the coefficients of pk0_u are guaranteed to not overflow the prime field of the circuit.
 
         constrain_poly_mul(
             pk0_with_length,
@@ -351,7 +353,7 @@ fn bfv_encryption_circuit<F: Field>(
         let binary_representation = format!("{:b}", (q_minus_1.clone() * q_minus_1 * deg));
         let num_bits_1 = binary_representation.len();
 
-        // The coefficients of pk0_u are in the range [0, (Q-1) * (Q-1) * DEG] according to the polynomial multiplication constraint set above.
+        // The coefficients of pk0_u are in the range [0, (Q-1) * (Q-1) * DEG] according to the above analysis.
         // Therefore the coefficients of pk0_u are known to have <= `num_bits_1` bits, therefore satisfying the assumption of the `poly_reduce_by_modulo_q` chip
 
         let pk0_u =
@@ -363,6 +365,31 @@ fn bfv_encryption_circuit<F: Field>(
 
         // 1.3 Reduce the coefficients by the cyclo polynomial to reduce pk0_u into a polynomial of degree DEG - 1
 
+        // COEFFICIENTS OVERFLOW ANALYSIS
+        // The assumptions of the chip are that:
+        // - the coefficients are constrained such to avoid overflow during the polynomial multiplication between `quotient` and `cyclo`
+        // - the coefficients are constrained such to avoid overflow during the polynomial addition between `quotient_times_cyclo` and `remainder`
+        //
+        // Assumption 1.
+        // The coefficients of quotient_0 are in the range [0, Q - 1] by constraint set inside the chip `constraint_poly_reduction_by_cyclo`.
+        // The coefficients of cyclo are either 0, 1 by assumption.
+        // The coefficients of quotient_times_cyclo are calculated as $c_{k} = \sum_{i=0}^{k} quotient[i] * divisor[k - i]$. Where k is the index of the coefficient c of quotient_times_cyclo.
+        // For two polynomials of differents degree n and m (where m < n), the max number of multiplication performed inside the summation is m + 1.
+        // The quotient is of degree DEG_DVD - DEG_DVS
+        // The cyclo is of degree DEG_DVS
+        // Since DEG_DVD = (2 * DEG_DVS) - 2 it follows that the degree of the divisor is greater than the degree of quotient.
+        // In that case there are max (degree quotient + 1) multiplications in the sum. Namely DEG_DVD - DEG_DVS + 1 multiplications.
+        // The maximum value of the coffiecient of quotient_times_cyclo is (Q-1) * (1) * (DEG_DVD - DEG_DVS + 1).
+        // Q needs to be chosen such that (Q-1) * (DEG_DVD - DEG_DVS + 1) < p where p is the prime field of the circuit in order to avoid overflow during the multiplication.
+        // Note that this is a subset of the assumption of the circuit -> (Q-1) * (Q-1) * DEG < p
+        //
+        // Assumption 2.
+        // The coefficients of remainder are in the range [0, Q - 1] by constraint set inside the chip `constraint_poly_reduction_by_cyclo`.
+        // The coefficients of quotient_times_cyclo are in the range [0, (Q-1) * (1) * (DEG_DVD - DEG_DVS + 1)] by analysis above.
+        // During polynomial addition, the maximum value of the coefficient of remainder_plus_quotient_times_cyclo is (Q-1) + (Q-1) * (DEG_DVD - DEG_DVS + 1).
+        // Note that this is a subset of the assumption of the circuit -> (Q-1) * (Q-1) * DEG < p
+        //
+        // Under this assumption, the coefficients of the polynomial multiplication and addition are guaranteed to not overflow the prime field of the circuit.
         constraint_poly_reduction_by_cyclo::<{ 2 * DEG - 2 }, DEG, Q, F>(
             &pk0_u,
             cyclo_with_length.clone(),
@@ -376,8 +403,6 @@ fn bfv_encryption_circuit<F: Field>(
         );
 
         let pk0_u = remainder_0_with_length.get_poly().clone();
-
-        // assert that the degree of pk0_u is 2*DEG - 2
 
         assert_eq!(pk0_u.len() - 1, 2 * DEG - 2);
 
@@ -407,17 +432,14 @@ fn bfv_encryption_circuit<F: Field>(
 
         // Perform the polynomial scalar multiplication between m and delta.
 
-        // DEGREE ANALYSIS
-        // The degree of m is DEG - 1 according to the constraint set above
-        // Delta is a scalar constant
-        // The degree of m_delta is constrained to be DEG - 1 according to the logic of the `poly_scalar_mul` chip
-
         // COEFFICIENTS OVERFLOW ANALYSIS
+        // The assumption of the chip is that the coefficients are constrained such to avoid overflow during the polynomial scalar multiplication
         // The coefficients of m are in the range [0, T/2] OR [Q - T/2, Q - 1] according to the constaints set above.
         // Delta is a constant equal to Q/T (integer division) where T < Q according to the assumption of the circuit.
         // The maximum value of a coefficient of m_delta is (Q-1) * (Q/T)
         // If the condition (Q-1) * (Q/T) < p is satisfied there is no risk of overflow during the scalar multiplication.
         // Note that this condition is a subset of the condition (Q-1) * (Q-1) * DEG < p which is an assumption of the circuit.
+        // Under this assumption, the coefficients of m_delta are guaranteed to not overflow the prime field of the circuit.
 
         let m_delta = poly_scalar_mul::<{ DEG - 1 }, F>(
             ctx_gate,
@@ -449,18 +471,14 @@ fn bfv_encryption_circuit<F: Field>(
 
         // Perform the polynomial addition between pk0_u_trimmed and m_delta.
 
-        // DEGREE ANALYSIS
-        // The degree of pk0_u_trimmed is DEG - 1 according to the constraint set above
-        // The degree of m_delta is DEG - 1 according to the constraint set above
-        // The degree of pk0_u_trimmed_plus_m_delta is constrained to be DEG - 1 according to the logic of the `poly_add` chip
-
         // COEFFICIENTS OVERFLOW ANALYSIS
+        // The assumption of the chip is that the coefficients are constrained such to avoid overflow during the polynomial addition
         // The coefficients of pk0_u_trimmed and m_delta are in the [0, Q -1] range according to the constraint set above.
         // The coefficients of m_delta are in the [0, Q -1] range according to the constraint set above.
         // The maximum value of the coefficient of pk0_u_trimmed_plus_m_delta is (Q-1) + (Q-1) = 2Q - 2.
         // If the condition  (Q-1) + (Q-1) < p is satisfied there is no risk of overflow during the polynomial addition.
         // Note that this condition is a subset of the condition (Q-1) * (Q-1) * DEG < p which is an assumption of the circuit.
-
+        // Under this assumption, the coefficients of pk0_u_trimmed_plus_m_delta are guaranteed to not overflow the prime field of the circuit.
         let pk0_u_trimmed_plus_m_delta =
             poly_add::<{ DEG - 1 }, F>(ctx_gate, &pk0_u_trimmed, &m_delta, range.gate());
 
@@ -490,17 +508,14 @@ fn bfv_encryption_circuit<F: Field>(
 
         // Perform the polynomial addition between pk0_u_trimmed_plus_m_delta and e0.
 
-        // DEGREE ANALYSIS
-        // The degree of pk0_u_trimmed_plus_m_delta is DEG - 1 according to the constraint set above
-        // The degree of e0 is DEG - 1 according to the constraint set above
-        // The degree of computed_c0 is constrained to be DEG - 1 according to the logic of the `poly_add` chip
-
         // COEFFICIENTS OVERFLOW ANALYSIS
+        // The assumption of the chip is that the coefficients are constrained such to avoid overflow during the polynomial addition
         // The coefficients of pk0_u_trimmed_plus_m_delta and m_delta are in the [0, Q -1] range according to the constraint set above.
         // The cofficients of e0 are in the range [0, b] OR [q-b, q-1] according to the constraint set above.
         // The maximum value of the coefficient of computed_c0 is (Q-1) + (Q-1) = 2Q - 2.
         // If the condition (Q-1) + (Q-1) < p is satisfied there is no risk of overflow during the polynomial addition.
         // Note that this condition is a subset of the condition (Q-1) * (Q-1) * DEG < p which is an assumption of the circuit.
+        // Under this assumption, the coefficients of computed_c0 are guaranteed to not overflow the prime field of the circuit.
 
         let computed_c0 =
             poly_add::<{ DEG - 1 }, F>(ctx_gate, &pk0_u_trimmed_plus_m_delta, &e0, range.gate());
@@ -522,7 +537,7 @@ fn bfv_encryption_circuit<F: Field>(
         // Constrain the polynomial multiplication between pk1 and u to be equal to pk§_u using the `constrain_poly_mul` chip
 
         // COEFFICIENTS OVERFLOW ANALYSIS
-        // Same as pk0 * u
+        // Same as 1.1
 
         constrain_poly_mul(
             pk1_with_length,
@@ -551,6 +566,8 @@ fn bfv_encryption_circuit<F: Field>(
 
         // 2.3 Reduce the coefficients by the cyclo polynomial to reduce pk0_u into a polynomial of degree DEG - 1
 
+        // COEFFICIENTS OVERFLOW ANALYSIS
+        // Same as 1.3
         constraint_poly_reduction_by_cyclo::<{ 2 * DEG - 2 }, DEG, Q, F>(
             &pk1_u,
             cyclo_with_length.clone(),
@@ -593,17 +610,14 @@ fn bfv_encryption_circuit<F: Field>(
 
         // Perform the polynomial addition between pk1_u_trimmed and e1.
 
-        // DEGREE ANALYSIS
-        // FIX The degree of pk1_u_trimmed is DEG - 1 according to the constraint set above
-        // The degree of e1 is DEG - 1 according to the constraint set above
-        // The degree of computed_c1 is constrained to be DEG - 1 according to the logic of the `poly_add` chip
-
         // COEFFICIENTS OVERFLOW ANALYSIS
+        // The assumption of the chip is that the coefficients are constrained such to avoid overflow during the polynomial addition
         // The coefficients of pk1_u_trimmed are in the [0, Q-1] range according to the constraint set above.
         // The cofficients of e1 are in the range [0, b] OR [q-b, q-1] according to the constraint set above.
         // The maximum value of the coefficient of computed_c1 is (Q-1) + (Q-1) = 2Q - 2.
         // If the condition (Q-1) + (Q-1) < p is satisfied there is no risk of overflow during the polynomial addition.
         // Note that this condition is a subset of the condition (Q-1) * (Q-1) * DEG < p which is an assumption of the circuit.
+        // Under this assumption, the coefficients of computed_c1 are guaranteed to not overflow the prime field of the circuit.
 
         // Perform the polynomial addition between pk1_u_trimmed and e1.
 
@@ -612,7 +626,7 @@ fn bfv_encryption_circuit<F: Field>(
         // The coefficients of computed_c1 are in the range [0, 2Q - 2] according to the polynomial addition constraint set above.
         // Therefore the coefficients of computed_c1 are known to have <= `num_bits_3` bits, therefore they satisfy the assumption of the `poly_reduce_by_modulo_q` chip
 
-        // 2.7 Reduce the coefficients of `computed_c1` by modulo `Q`
+        // 2.6 Reduce the coefficients of `computed_c1` by modulo `Q`
 
         let computed_c1 =
             poly_reduce_by_modulo_q::<{ DEG - 1 }, Q, F>(ctx_gate, &computed_c1, range, num_bits_3);
