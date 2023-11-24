@@ -50,8 +50,6 @@ pub fn poly_add<const DEG: usize, F: Field>(
 /// This algorithm takes O(N) constraints as it requires to:
 /// - Evaluate the polynomials a, b and c at gamma (3N constraints)
 /// - Enforce the identity a(gamma) * b(gamma) - c(gamma) = 0 (1 constraint)
-///
-/// Assumption: the coefficients are constrained such to avoid overflow during the polynomial multiplication
 pub fn constrain_poly_mul<F: Field>(
     a_assigned_with_length: PolyWithLength<F>,
     b_assigned_with_length: PolyWithLength<F>,
@@ -129,7 +127,7 @@ pub fn poly_scalar_mul<const DEG: usize, F: Field>(
 ///
 /// * DEG is the degree of the polynomial
 /// * Input polynomial is parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
-/// * It assumes that the coefficients of the input polynomial can be expressed in at most num_bits bits
+/// * Assumption: the coefficients of the input polynomial can be expressed in at most num_bits bits
 pub fn poly_reduce_by_modulo_q<const DEG: usize, const Q: u64, F: Field>(
     ctx: &mut Context<F>,
     input: &Vec<AssignedValue<F>>,
@@ -176,7 +174,7 @@ pub fn poly_u64_assign<const DEG: usize, F: Field>(
     output
 }
 
-/// Takes a polynomial represented by its coefficients in a vector of BigInt and output the same polynomial represented by its coefficients in a vector of assigned values
+/// Takes a polynomial represented by its coefficients in a vector of BigInt and output the same polynomial represented by its coefficients in a vector of assigned values of length DEG + 1
 pub fn poly_big_int_assign<const DEG: usize, F: Field>(
     ctx: &mut Context<F>,
     poly: &Vec<BigInt>,
@@ -211,8 +209,9 @@ pub fn poly_big_int_assign<const DEG: usize, F: Field>(
 /// * DEG_DVS is the degree of the divisor polynomial (cyclo)
 /// * Q is the modulus of the ring R_q (cipher text space)
 ///
-/// Assumption: the coefficients are constrained such to avoid overflow during the polynomial multiplication between `quotient` and `cyclo`
-/// Assumption: the coefficients are constrained such to avoid overflow during the polynomial addition between `quotient_times_cyclo` and `remainder`
+/// * Assumption: the coefficients are constrained such to avoid overflow during the polynomial addition between `quotient_times_cyclo` and `remainder`
+/// * Assumption: the coefficients of quotient have to be in the range [0, Q - 1]
+/// * Assumption: the coefficients of remainder have to be in the range [0, Q - 1]
 pub fn constrain_poly_reduction_by_cyclo<
     const DEG_DVD: usize,
     const DEG_DVS: usize,
@@ -239,27 +238,6 @@ pub fn constrain_poly_reduction_by_cyclo<
 
     // DEG_DVS must be strictly less than DEG_DVD
     assert!(DEG_DVS < DEG_DVD);
-
-    // Quotient is obtained by dividing the coefficients of poly (dividend) by the highest degree coefficient of cyclo (divisor)
-    // The coefficients of poly are in the range [0, Q - 1] by assumption.
-    // The leading coefficient of divisor is 1 by assumption.
-    // Therefore, the coefficients of quotient have to be in the range [0, Q - 1]
-    // Since the quotient is computed outside the circuit and then assigned to the circuit, we need to enforce this constraint
-    for i in 0..DEG_DVD - DEG_DVS + 1 {
-        range.check_less_than_safe(ctx_gate, quotient.assigned_poly[i], Q);
-    }
-
-    // Remainder is equal to dividend - (quotient * divisor).
-    // The coefficients of dividend are in the range [0, Q - 1] by assumption.
-    // The coefficients of quotient are in the range [0, Q - 1] by constraint set above.
-    // The coefficients of divisior are either 0, 1 by assumption of the cyclotomic polynomial.
-    // It follows that the coefficients of quotient * divisor are in the range [0, Q - 1]
-    // The remainder (as result dividend - (quotient * divisor)) might have coefficients that are negative. In that case we add Q to them to make them positive.
-    // Therefore, the coefficients of remainder are in the range [0, Q - 1]
-    // Since the remainder is computed outside the circuit and then assigned to the circuit, we need to enforce this constraint
-    for i in 0..DEG_DVD + 1 {
-        range.check_less_than_safe(ctx_gate, remainder.assigned_poly[i], Q);
-    }
 
     // Check that poly = quotient * cyclo + remainder
 
@@ -290,7 +268,7 @@ pub fn constrain_poly_reduction_by_cyclo<
     ); // Convert to binary (base-2)
     let num_bits = binary_representation.len();
 
-    // The coefficients of sum are in the range [0, (Q-1) * (DEG_DVD - DEG_DVS + 1)] + Q-1] according to the polynomial addition constraint set above.
+    // The coefficients of sum are in the range [0, (Q-1) * (DEG_DVD - DEG_DVS + 1)] + Q-1] according to the polynomial addition constraint set above. Proof left as an exercise to the reader.
     // Therefore the coefficients of sum are known to have <= `num_bits` bits, therefore they satisfy the assumption of the `poly_reduce` chip
     let sum_mod = poly_reduce_by_modulo_q::<DEG_DVD, Q, F>(ctx_gate, &sum, range, num_bits);
 
