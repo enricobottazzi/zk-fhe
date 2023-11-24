@@ -10,7 +10,7 @@ use zk_fhe::chips::poly_distribution::{
     check_poly_coefficients_in_range, check_poly_from_distribution_chi_key,
 };
 use zk_fhe::chips::poly_operations::{
-    constrain_poly_mul, constraint_poly_reduction_by_cyclo, poly_add, poly_big_int_assign,
+    constrain_poly_mul, constrain_poly_reduction_by_cyclo, poly_add, poly_big_int_assign,
     poly_reduce_by_modulo_q, poly_scalar_mul, poly_u64_assign,
 };
 use zk_fhe::chips::utils::{div_euclid, poly_mul, reduce_poly_by_modulo_q, vec_u64_to_vec_bigint};
@@ -56,16 +56,16 @@ use zk_fhe::chips::PolyWithLength;
 // T is picked according to Lattigo (https://github.com/tuneinsight/lattigo/blob/master/schemes/bfv/example_parameters.go) implementation
 // As suggest by https://eprint.iacr.org/2021/204.pdf (paragraph 2) B = 6σerr
 // These are just parameters used for fast testing purpose - to match with input file `data/bfv.in`
-// const DEG: usize = 4;
-// const Q: u64 = 4637;
-// const T: u64 = 7;
-// const B: u64 = 18;
-
-// These are the parameters used for the real world application - to match with input file `data/bfv_2.in`
-const DEG: usize = 1024;
-const Q: u64 = 536870909;
+const DEG: usize = 4;
+const Q: u64 = 4637;
 const T: u64 = 7;
 const B: u64 = 18;
+
+// These are the parameters used for the real world application - to match with input file `data/bfv_2.in`
+// const DEG: usize = 1024;
+// const Q: u64 = 536870909;
+// const T: u64 = 7;
+// const B: u64 = 18;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CircuitInput<const DEG: usize, const Q: u64, const T: u64, const B: u64> {
@@ -371,7 +371,7 @@ fn bfv_encryption_circuit<F: Field>(
         // - the coefficients are constrained such to avoid overflow during the polynomial addition between `quotient_times_cyclo` and `remainder`
         //
         // Assumption 1.
-        // The coefficients of quotient_0 are in the range [0, Q - 1] by constraint set inside the chip `constraint_poly_reduction_by_cyclo`.
+        // The coefficients of quotient_0 are in the range [0, Q - 1] by constraint set inside the chip `constrain_poly_reduction_by_cyclo`.
         // The coefficients of cyclo are either 0, 1 by assumption.
         // The coefficients of quotient_times_cyclo are calculated as $c_{k} = \sum_{i=0}^{k} quotient[i] * divisor[k - i]$. Where k is the index of the coefficient c of quotient_times_cyclo.
         // For two polynomials of differents degree n and m (where m < n), the max number of multiplication performed inside the summation is m + 1.
@@ -384,13 +384,13 @@ fn bfv_encryption_circuit<F: Field>(
         // Note that this is a subset of the assumption of the circuit -> (Q-1) * (Q-1) * DEG < p
         //
         // Assumption 2.
-        // The coefficients of remainder are in the range [0, Q - 1] by constraint set inside the chip `constraint_poly_reduction_by_cyclo`.
+        // The coefficients of remainder are in the range [0, Q - 1] by constraint set inside the chip `constrain_poly_reduction_by_cyclo`.
         // The coefficients of quotient_times_cyclo are in the range [0, (Q-1) * (1) * (DEG_DVD - DEG_DVS + 1)] by analysis above.
         // During polynomial addition, the maximum value of the coefficient of remainder_plus_quotient_times_cyclo is (Q-1) + (Q-1) * (DEG_DVD - DEG_DVS + 1).
         // Note that this is a subset of the assumption of the circuit -> (Q-1) * (Q-1) * DEG < p
         //
         // Under this assumption, the coefficients of the polynomial multiplication and addition are guaranteed to not overflow the prime field of the circuit.
-        constraint_poly_reduction_by_cyclo::<{ 2 * DEG - 2 }, DEG, Q, F>(
+        constrain_poly_reduction_by_cyclo::<{ 2 * DEG - 2 }, DEG, Q, F>(
             &pk0_u,
             cyclo_with_length.clone(),
             quotient_0_with_length,
@@ -568,7 +568,7 @@ fn bfv_encryption_circuit<F: Field>(
 
         // COEFFICIENTS OVERFLOW ANALYSIS
         // Same as 1.3
-        constraint_poly_reduction_by_cyclo::<{ 2 * DEG - 2 }, DEG, Q, F>(
+        constrain_poly_reduction_by_cyclo::<{ 2 * DEG - 2 }, DEG, Q, F>(
             &pk1_u,
             cyclo_with_length.clone(),
             quotient_1_with_length,

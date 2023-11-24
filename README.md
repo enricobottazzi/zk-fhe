@@ -5,6 +5,10 @@ Implementation based on [Revisiting Homomorphic Encryption Schemes for Finite Fi
 
 The application is not production ready and is only meant to be used for educational purposes.
 
+## Disclaimer
+
+This is a research project and is not meant to be used in production. The code is not audited.
+
 ## Quick Start
 
 **Mock Prover**
@@ -47,16 +51,15 @@ Verify the proof generated above
 - `check_poly_coefficients_in_range` - Enforces polynomial coefficients to be within a specified range
 - `check_poly_from_distribution_chi_key` - Enforces polynomial to be sampled from the chi key
 - `poly_add` - Enforces polynomial addition
-- `poly_mul_equal_deg` - Enforces polynomial multiplication between polynomials of equal degree
-- `poly_mul_diff_deg` - Enforces polynomial multiplication between polynomials of different degree
+- `constrain_poly_mul` - Constrain polynomial multiplication
 - `poly_scalar_mul` - Enforces scalar multiplication of a polynomial
-- `poly_reduce` - Enforces reduction of polynomial coefficients by a modulus
-- `poly_divide_by_cyclo` - Enforces the reduction of a polynomial by a cyclotomic polynomial
+- `poly_reduce_by_modulo_q` - Enforces reduction of polynomial coefficients by a modulus
+- `constraint_poly_reduction_by_cyclo` - Constrain polynomial reduction by a cyclotomic polynomial
 
 ## Benchmarks
 
-- **Proving time: 61s** 
-- **Verification time: 261ms**
+- **Proving time: 37s** 
+- **Verification time: 246ms**
 
 Benches run using `bfv_2` run on M2 Macbook Pro with 12 cores and 32GB of RAM.
 

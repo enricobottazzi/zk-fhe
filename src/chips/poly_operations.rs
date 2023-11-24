@@ -213,7 +213,7 @@ pub fn poly_big_int_assign<const DEG: usize, F: Field>(
 ///
 /// Assumption: the coefficients are constrained such to avoid overflow during the polynomial multiplication between `quotient` and `cyclo`
 /// Assumption: the coefficients are constrained such to avoid overflow during the polynomial addition between `quotient_times_cyclo` and `remainder`
-pub fn constraint_poly_reduction_by_cyclo<
+pub fn constrain_poly_reduction_by_cyclo<
     const DEG_DVD: usize,
     const DEG_DVS: usize,
     const Q: u64,
