@@ -1,4 +1,5 @@
-use crate::chips::utils::{big_uint_to_fp, div_euclid, vec_assigned_to_vec_big_int};
+use crate::chips::utils::big_uint_to_fp;
+use crate::chips::PolyWithLength;
 use axiom_eth::rlp::rlc::RlcChip;
 use axiom_eth::Field;
 use halo2_base::{
@@ -50,25 +51,37 @@ pub fn poly_add<const DEG: usize, F: Field>(
 /// - Evaluate the polynomials a, b and c at gamma (3N constraints)
 /// - Enforce the identity a(gamma) * b(gamma) - c(gamma) = 0 (1 constraint)
 pub fn constrain_poly_mul<F: Field>(
-    a_assigned: Vec<AssignedValue<F>>,
-    a_len: AssignedValue<F>,
-    b_assigned: Vec<AssignedValue<F>>,
-    b_len: AssignedValue<F>,
-    c_assigned: Vec<AssignedValue<F>>,
-    c_len: AssignedValue<F>,
+    a_assigned_with_length: PolyWithLength<F>,
+    b_assigned_with_length: PolyWithLength<F>,
+    c_assigned_with_length: PolyWithLength<F>,
     ctx_gate: &mut Context<F>,
     ctx_rlc: &mut Context<F>,
     rlc: &RlcChip<F>,
     gate: &GateChip<F>,
 ) {
     // `compute_rlc` evaluates the polynomial at gamma and returns the evaluation
-    let poly_a_trace = rlc.compute_rlc((ctx_gate, ctx_rlc), gate, a_assigned, a_len);
+    let poly_a_trace = rlc.compute_rlc(
+        (ctx_gate, ctx_rlc),
+        gate,
+        a_assigned_with_length.assigned_poly,
+        a_assigned_with_length.assigned_length,
+    );
     let poly_a_eval_assigned = poly_a_trace.rlc_val;
 
-    let poly_b_trace = rlc.compute_rlc((ctx_gate, ctx_rlc), gate, b_assigned, b_len);
+    let poly_b_trace = rlc.compute_rlc(
+        (ctx_gate, ctx_rlc),
+        gate,
+        b_assigned_with_length.assigned_poly,
+        b_assigned_with_length.assigned_length,
+    );
     let poly_b_eval_assigned = poly_b_trace.rlc_val;
 
-    let poly_c_trace = rlc.compute_rlc((ctx_gate, ctx_rlc), gate, c_assigned, c_len);
+    let poly_c_trace = rlc.compute_rlc(
+        (ctx_gate, ctx_rlc),
+        gate,
+        c_assigned_with_length.assigned_poly,
+        c_assigned_with_length.assigned_length,
+    );
     let poly_c_eval_assigned = poly_c_trace.rlc_val;
 
     // enforce gate a(gamma) * b(gamma) - c(gamma) = 0
@@ -138,104 +151,97 @@ pub fn poly_reduce_by_modulo_q<const DEG: usize, const Q: u64, F: Field>(
     rem_assigned
 }
 
-/// Takes a polynomial `divisor` represented by its coefficients in a vector.
-/// Takes a cyclotomic polynomial `dividend` f(x)=x^m+1 (m is a power of 2) of the form represented by its coefficients in a vector
-/// Output the remainder of the division of `dividend` by `dividend` as a vector of coefficients
+/// Takes a polynomial represented by its coefficients in a vector of u64 and output the same polynomial represented by its coefficients in a vector of assigned values
+/// The generic parameter DEG enforce that the degree of the output polynomial is equal to DEG
+pub fn poly_u64_assign<const DEG: usize, F: Field>(
+    ctx: &mut Context<F>,
+    poly: &Vec<u64>,
+) -> Vec<AssignedValue<F>> {
+    // assert that the degree of the input polynomial is equal to DEG
+    assert_eq!(poly.len() - 1, DEG);
+
+    let mut output = vec![];
+
+    for &item in poly.iter().take(DEG + 1) {
+        let val = F::from(item);
+        let assigned_val = ctx.load_witness(val);
+        output.push(assigned_val);
+    }
+
+    // assert that the degree of the output polynomial is equal to DEG - Note: this is not a constraint but a sanity check
+    assert_eq!(output.len() - 1, DEG);
+
+    output
+}
+
+/// Takes a polynomial represented by its coefficients in a vector of BigInt and output the same polynomial represented by its coefficients in a vector of assigned values
+pub fn poly_big_int_assign<const DEG: usize, F: Field>(
+    ctx: &mut Context<F>,
+    poly: &Vec<BigInt>,
+) -> Vec<AssignedValue<F>> {
+    // assert that the degree of the input polynomial is equal to DEG
+    assert_eq!(poly.len() - 1, DEG);
+
+    let mut output = vec![];
+
+    for item in poly.iter().take(DEG + 1) {
+        let val = big_uint_to_fp(item);
+        let assigned_val = ctx.load_witness(val);
+        output.push(assigned_val);
+    }
+
+    // assert that the degree of the output polynomial is equal to DEG
+    assert_eq!(output.len() - 1, DEG);
+
+    output
+}
+
+/// Takes as inputs:
+/// - a polynomial `poly` to be reduced (dividend)
+/// - a `cyclo` polynomial (divisor)
+/// - the `quotient` polynomial (which is the result of dividing `poly` by `cyclo`)
+/// - the `quotient_times_cyclo` polynomial (which is the result of multiplying `quotient` by `cyclo`)
+/// - the `remainder` polynomial of the division
+/// Note that the `remainder` polynomial is the reduced version of `poly` by `cyclo`.
+/// Enforce that `poly` = `quotient` * `cyclo` + `remainder`
 ///
-/// * DEG_DVD is the degree of the `dividend` polynomial
-/// * DEG_DVS is the degree of the `divisor` polynomial
+/// * DEG_DVD is the degree of the dividend polynomial (poly)
+/// * DEG_DVS is the degree of the divisor polynomial (cyclo)
 /// * Q is the modulus of the ring R_q (cipher text space)
-/// * Input polynomials is parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
-/// * Assumes that the degree of dividend is equal to (2 * DEG_DVS) - 2
-/// * Assumes that the coefficients of `dividend` are in the range [0, Q - 1]
-/// * Assumes that divisor is a cyclotomic polynomial with coefficients either 0 or 1
-/// * Assumes that dividend and divisor can be expressed as u64 values
-/// * Assumes that Q is chosen such that (Q-1) * (DEG_DVD - DEG_DVS + 1)] + Q-1 < p where p is the prime field of the circuit in order to avoid overflow during the multiplication
-pub fn poly_reduce_by_cyclo<const DEG_DVD: usize, const DEG_DVS: usize, const Q: u64, F: Field>(
-    dividend: &Vec<AssignedValue<F>>,
-    divisor: &Vec<AssignedValue<F>>,
-    divisor_len: AssignedValue<F>,
-    quotient: &Vec<AssignedValue<F>>,
-    quotient_len: AssignedValue<F>,
-    product_quotient_divisor: &Vec<AssignedValue<F>>,
-    product_quotient_divisor_len: AssignedValue<F>,
-    range_gate: &RangeChip<F>,
+pub fn constraint_poly_reduction_by_cyclo<
+    const DEG_DVD: usize,
+    const DEG_DVS: usize,
+    const Q: u64,
+    F: Field,
+>(
+    poly: &Vec<AssignedValue<F>>,
+    cyclo: PolyWithLength<F>,
+    quotient: PolyWithLength<F>,
+    quotient_times_cyclo: PolyWithLength<F>,
+    remainder: PolyWithLength<F>,
+    range: &RangeChip<F>,
     ctx_gate: &mut Context<F>,
     ctx_rlc: &mut Context<F>,
     rlc: &RlcChip<F>,
-) -> Vec<AssignedValue<F>> {
-    // Assert that degree of dividend polynomial is equal to the constant DEG_DVD
-    assert_eq!(dividend.len() - 1, DEG_DVD);
-    // Assert that degree of divisor poly is equal to the constant DEG_DVS
-    assert_eq!(divisor.len() - 1, DEG_DVS);
-    // Assert that degree of dividend is equal to (2 * DEG_DVS) - 2
-    assert_eq!(dividend.len() - 1, (2 * DEG_DVS) - 2);
+) {
+    // Note: these are not constraints but just sanity check
+    assert_eq!(poly.len() - 1, DEG_DVD);
+    assert_eq!(cyclo.assigned_poly.len() - 1, DEG_DVS);
+    assert_eq!(poly.len() - 1, (2 * DEG_DVS) - 2);
+    assert_eq!(quotient.assigned_poly.len() - 1, DEG_DVD - DEG_DVS);
+    assert_eq!(quotient_times_cyclo.assigned_poly.len() - 1, DEG_DVD);
+    assert_eq!(remainder.assigned_poly.len() - 1, DEG_DVD);
 
     // DEG_DVS must be strictly less than DEG_DVD
     assert!(DEG_DVS < DEG_DVD);
 
-    // long division operation performed outside the circuit
-    // Need to convert the dividend and divisor into a vector of bigint
-    let dividend_to_biguint = vec_assigned_to_vec_big_int(dividend);
-    let divisor_to_biguint = vec_assigned_to_vec_big_int(divisor);
-
-    let (quotient_to_biguint, remainder_to_biguint) =
-        div_euclid::<DEG_DVD, DEG_DVS, Q>(&dividend_to_biguint, &divisor_to_biguint);
-
-    // After the division, the degree of the quotient should be equal to DEG_DVD - DEG_DVS
-    assert_eq!(quotient_to_biguint.len() - 1, DEG_DVD - DEG_DVS);
-
-    // Furthermore, the degree of the remainder must be strictly less than the degree of the divisor
-    assert!(remainder_to_biguint.len() - 1 < DEG_DVS);
-
-    // Pad the remainder with 0s to make its degree equal to DEG_DVS - 1
-    let mut remainder_to_biguint = remainder_to_biguint;
-    while remainder_to_biguint.len() - 1 < DEG_DVS - 1 {
-        remainder_to_biguint.push(BigInt::from(0u32));
-    }
-
-    // Now remainder must be of degree DEG_DVS - 1
-    assert_eq!(remainder_to_biguint.len() - 1, DEG_DVS - 1);
-
-    // Later we need to perform the operation remainder + prod where prod is of degree DEG_DVD
-    // In order to perform the operation inside the circuit we need to pad the remainder with 0s at the beginning to make its degree equal to DEG_DVD
-    let mut remainder_to_biguint = remainder_to_biguint;
-    while remainder_to_biguint.len() - 1 < DEG_DVD {
-        remainder_to_biguint.insert(0, BigInt::from(0u32));
-    }
-
-    // Now remainder must be of degree DEG_DVD
-    assert_eq!(remainder_to_biguint.len() - 1, DEG_DVD);
-
-    // Assign the quotient and remainder to the circuit
-    let mut quotient = vec![];
-    let mut remainder = vec![];
-
-    for i in 0..DEG_DVD - DEG_DVS + 1 {
-        let val = big_uint_to_fp(&quotient_to_biguint[i]);
-        let assigned_val = ctx_gate.load_witness(val);
-        quotient.push(assigned_val);
-    }
-
-    for i in 0..DEG_DVD + 1 {
-        let val = big_uint_to_fp(&remainder_to_biguint[i]);
-        let assigned_val = ctx_gate.load_witness(val);
-        remainder.push(assigned_val);
-    }
-
-    // assert that the degree of quotient is DEG_DVD - DEG_DVS
-    assert_eq!(quotient.len() - 1, DEG_DVD - DEG_DVS);
-
-    // assert that the degree of remainder is DEG_DVD
-    assert_eq!(remainder.len() - 1, DEG_DVD);
-
-    // Quotient is obtained by dividing the coefficients of the dividend by the highest degree coefficient of divisor
-    // The coefficients of dividend are in the range [0, Q - 1] by assumption.
+    // Quotient is obtained by dividing the coefficients of poly (dividend) by the highest degree coefficient of cyclo (divisor)
+    // The coefficients of poly are in the range [0, Q - 1] by assumption.
     // The leading coefficient of divisor is 1 by assumption.
     // Therefore, the coefficients of quotient have to be in the range [0, Q - 1]
     // Since the quotient is computed outside the circuit, we need to enforce this constraint
-    for i in 0..(DEG_DVD - DEG_DVS + 1) {
-        range_gate.check_less_than_safe(ctx_gate, quotient[i], Q);
+    for i in 0..DEG_DVD - DEG_DVS + 1 {
+        range.check_less_than_safe(ctx_gate, quotient.assigned_poly[i], Q);
     }
 
     // Remainder is equal to dividend - (quotient * divisor).
@@ -246,83 +252,32 @@ pub fn poly_reduce_by_cyclo<const DEG_DVD: usize, const DEG_DVS: usize, const Q:
     // The remainder (as result dividend - (quotient * divisor)) might have coefficients that are negative. In that case we add Q to them to make them positive.
     // Therefore, the coefficients of remainder are in the range [0, Q - 1]
     // Since the remainder is computed outside the circuit, we need to enforce this constraint
-    for i in 0..DEG_DVS {
-        range_gate.check_less_than_safe(ctx_gate, remainder[i], Q);
+    for i in 0..DEG_DVD + 1 {
+        range.check_less_than_safe(ctx_gate, remainder.assigned_poly[i], Q);
     }
 
-    // check that quotient * divisor + remainder = dividend
+    // Check that poly = quotient * cyclo + remainder
 
-    // DEGREE ANALYSIS
-    // Quotient is of degree DEG_DVD - DEG_DVS
-    // Divisor is of degree DEG_DVS
-    // Quotient * divisor is of degree DEG_DVD
-    // Remainder is of degree DEG_DVD
-    // Quotient * divisor + rem is of degree DEG_DVD
-    // Dividend is of degree DEG_DVD
-
-    // Perform the polynomial multiplication between quotient and divisor
-
-    // COEFFICIENTS OVERFLOW ANALYSIS
-    // The coefficients of quotient are in the range [0, Q - 1] by constraint set above.
-    // The coefficients of divisor are either 0, 1 by assumption.
-    // The coefficients of prod are calculated as $c_{k} = \sum_{i=0}^{k} quotient[i] * divisor[k - i]$. Where k is the index of the coefficient c of prod.
-    // For two polynomials of differents degree n and m (where m < n), the max number of multiplication performed inside the summation is m + 1.
-    // The quotient is of degree DEG_DVD - DEG_DVS
-    // The divisor is of degree DEG_DVS
-    // Since DEG_DVD = (2 * DEG_DVS) - 2 it follows that the degree of the divisor is greater than the degree of quotient.
-    // In that case there are max (degree quotient + 1) multiplications in the sum. Namely DEG_DVD - DEG_DVS + 1 multiplications.
-    // The maximum value of the coffiecient of prod is (Q-1) * (1) * (DEG_DVD - DEG_DVS + 1).
-    // Q needs to be chosen such that (Q-1) * (DEG_DVD - DEG_DVS + 1) < p where p is the prime field of the circuit in order to avoid overflow during the multiplication.
-    // Note that this is a subset of the assumption of the circuit
-    // Therefore, the coefficients of prod are in the range [0, (Q-1) * (DEG_DVD - DEG_DVS + 1)]
-
-    // We use a polynomial multiplication algorithm that does not require the input polynomials to be of the same degree
-
-    // Here we need to constraint that product = quotient * divisor
+    // First, let's constrain that quotient * cyclo = quotient_times_cyclo
     constrain_poly_mul(
-        quotient.clone(),
-        quotient_len,
-        divisor.clone(),
-        divisor_len,
-        product_quotient_divisor.clone(),
-        product_quotient_divisor_len,
+        quotient,
+        cyclo,
+        quotient_times_cyclo.clone(),
         ctx_gate,
         ctx_rlc,
         rlc,
-        range_gate.gate(),
+        range.gate(),
     );
 
-    // let prod = poly_mul_diff_deg(ctx_gate, &quotient, divisor, range_gate.gate());
-
-    // The degree of prod is DEG_DVD
-    assert_eq!(product_quotient_divisor.len() - 1, DEG_DVD);
-
-    // Perform the addition between prod and remainder
-
-    // DEGREE ANALYSIS
-    // Prod is of degree DEG_DVD
-    // Remainder is of degree DEG_DVD
-    // Prod + rem is of degree DEG_DVD
-
-    // COEFFICIENTS OVERFLOW ANALYSIS
-    // The coefficients of prod are in the range [0, (Q-1) * (DEG_DVD - DEG_DVS + 1)] by the constraint above.
-    // The coefficients of remainder are in the range [0, Q - 1] by constraint set above.
-    // Therefore, the coefficients of prod + remainder are in the range [0, [0, (Q-1) * (DEG_DVD - DEG_DVS + 1)] + Q-1].
-    // Q needs to be chosen such that (Q-1) * (DEG_DVD - DEG_DVS + 1)] + Q-1 < p where p is the prime field of the circuit in order to avoid overflow during the addition.
-    // This is true by assumption of the chip.
-
+    // Perform the addition between quotient_times_cyclo and remainder
     let sum = poly_add::<DEG_DVD, F>(
         ctx_gate,
-        product_quotient_divisor,
-        &remainder,
-        range_gate.gate(),
+        quotient_times_cyclo.get_poly(),
+        remainder.get_poly(),
+        range.gate(),
     );
 
-    // assert that the degree of sum is DEG_DVD
-    assert_eq!(sum.len() - 1, DEG_DVD);
-
     // We can reduce the coefficients of sum modulo Q to make them in the range [0, Q - 1]
-
     // get the number of bits needed to represent the value of (Q-1) * (DEG_DVD - DEG_DVS + 1)] + Q-1
     let binary_representation = format!(
         "{:b}",
@@ -332,20 +287,11 @@ pub fn poly_reduce_by_cyclo<const DEG_DVD: usize, const DEG_DVS: usize, const Q:
 
     // The coefficients of sum are in the range [0, (Q-1) * (DEG_DVD - DEG_DVS + 1)] + Q-1] according to the polynomial addition constraint set above.
     // Therefore the coefficients of sum are known to have <= `num_bits` bits, therefore they satisfy the assumption of the `poly_reduce` chip
-    let sum_mod = poly_reduce_by_modulo_q::<DEG_DVD, Q, F>(ctx_gate, &sum, range_gate, num_bits);
+    let sum_mod = poly_reduce_by_modulo_q::<DEG_DVD, Q, F>(ctx_gate, &sum, range, num_bits);
 
-    // assert that the degree of sum_mod is DEG_DVD
-    assert_eq!(sum_mod.len() - 1, DEG_DVD);
-
-    // Enforce that sum_mod = dividend
+    // Enforce that sum_mod = poly
     for i in 0..=DEG_DVD {
-        let bool = range_gate
-            .gate()
-            .is_equal(ctx_gate, sum_mod[i], dividend[i]);
-        range_gate
-            .gate()
-            .assert_is_const(ctx_gate, &bool, &F::from(1))
+        let bool = range.gate().is_equal(ctx_gate, sum_mod[i], poly[i]);
+        range.gate().assert_is_const(ctx_gate, &bool, &F::from(1))
     }
-
-    remainder
 }

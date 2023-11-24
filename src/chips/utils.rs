@@ -108,7 +108,7 @@ pub fn big_uint_to_fp<F: ScalarField>(big_uint: &BigInt) -> F {
 }
 
 /// Reduce a polynomial by a modulus Q coefficient-wise
-pub fn reduce_poly<const Q: u64>(poly: &Vec<BigInt>) -> Vec<BigInt> {
+pub fn reduce_poly_by_modulo_q<const Q: u64>(poly: &Vec<BigInt>) -> Vec<BigInt> {
     let mut reduced_poly = Vec::new();
 
     for coeff in poly {
