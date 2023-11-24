@@ -115,7 +115,7 @@ pub fn poly_scalar_mul<const DEG: usize, F: Field>(
 /// * DEG is the degree of the polynomial
 /// * Input polynomial is parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
 /// * It assumes that the coefficients of the input polynomial can be expressed in at most num_bits bits
-pub fn poly_reduce<const DEG: usize, const Q: u64, F: Field>(
+pub fn poly_reduce_by_modulo_q<const DEG: usize, const Q: u64, F: Field>(
     ctx: &mut Context<F>,
     input: &Vec<AssignedValue<F>>,
     range: &RangeChip<F>,
@@ -151,7 +151,7 @@ pub fn poly_reduce<const DEG: usize, const Q: u64, F: Field>(
 /// * Assumes that divisor is a cyclotomic polynomial with coefficients either 0 or 1
 /// * Assumes that dividend and divisor can be expressed as u64 values
 /// * Assumes that Q is chosen such that (Q-1) * (DEG_DVD - DEG_DVS + 1)] + Q-1 < p where p is the prime field of the circuit in order to avoid overflow during the multiplication
-pub fn poly_divide_by_cyclo<const DEG_DVD: usize, const DEG_DVS: usize, const Q: u64, F: Field>(
+pub fn poly_reduce_by_cyclo<const DEG_DVD: usize, const DEG_DVS: usize, const Q: u64, F: Field>(
     dividend: &Vec<AssignedValue<F>>,
     divisor: &Vec<AssignedValue<F>>,
     divisor_len: AssignedValue<F>,
@@ -332,7 +332,7 @@ pub fn poly_divide_by_cyclo<const DEG_DVD: usize, const DEG_DVS: usize, const Q:
 
     // The coefficients of sum are in the range [0, (Q-1) * (DEG_DVD - DEG_DVS + 1)] + Q-1] according to the polynomial addition constraint set above.
     // Therefore the coefficients of sum are known to have <= `num_bits` bits, therefore they satisfy the assumption of the `poly_reduce` chip
-    let sum_mod = poly_reduce::<DEG_DVD, Q, F>(ctx_gate, &sum, range_gate, num_bits);
+    let sum_mod = poly_reduce_by_modulo_q::<DEG_DVD, Q, F>(ctx_gate, &sum, range_gate, num_bits);
 
     // assert that the degree of sum_mod is DEG_DVD
     assert_eq!(sum_mod.len() - 1, DEG_DVD);

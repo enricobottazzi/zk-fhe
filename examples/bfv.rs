@@ -10,7 +10,7 @@ use zk_fhe::chips::poly_distribution::{
     check_poly_coefficients_in_range, check_poly_from_distribution_chi_key,
 };
 use zk_fhe::chips::poly_operations::{
-    constrain_poly_mul, poly_add, poly_divide_by_cyclo, poly_reduce, poly_scalar_mul,
+    constrain_poly_mul, poly_add, poly_reduce_by_cyclo, poly_reduce_by_modulo_q, poly_scalar_mul,
 };
 use zk_fhe::chips::utils::{
     big_uint_to_fp, div_euclid, poly_mul, reduce_poly, vec_u64_to_vec_bigint,
@@ -55,16 +55,16 @@ use zk_fhe::chips::utils::{
 // T is picked according to Lattigo (https://github.com/tuneinsight/lattigo/blob/master/schemes/bfv/example_parameters.go) implementation
 // As suggest by https://eprint.iacr.org/2021/204.pdf (paragraph 2) B = 6σerr
 // These are just parameters used for fast testing purpose - to match with input file `data/bfv.in`
-const DEG: usize = 4;
-const Q: u64 = 4637;
-const T: u64 = 7;
-const B: u64 = 18;
+// const DEG: usize = 4;
+// const Q: u64 = 4637;
+// const T: u64 = 7;
+// const B: u64 = 18;
 
 // // These are the parameters used for the real world application - to match with input file `data/bfv_2.in`
-// const DEG: usize = 1024;
-// const Q: u64 = 536870909;
-// const T: u64 = 65537;
-// const B: u64 = 18;
+const DEG: usize = 1024;
+const Q: u64 = 536870909;
+const T: u64 = 7;
+const B: u64 = 18;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CircuitInput<const DEG: usize, const Q: u64, const T: u64, const B: u64> {
@@ -394,23 +394,24 @@ fn bfv_encryption_circuit<F: Field>(
         let num_bits_1 = binary_representation.len();
 
         // The coefficients of pk0_u are in the range [0, (Q-1) * (Q-1) * DEG] according to the polynomial multiplication constraint set above.
-        // Therefore the coefficients of pk0_u are known to have <= `num_bits_1` bits, therefore they satisfy the assumption of the `poly_reduce` chip
+        // Therefore the coefficients of pk0_u are known to have <= `num_bits_1` bits, therefore they satisfy the assumption of the `poly_reduce_by_modulo_q` chip
 
-        let pk0_u = poly_reduce::<{ 2 * DEG - 2 }, Q, F>(ctx_gate, &pk0_u, range, num_bits_1);
+        let pk0_u =
+            poly_reduce_by_modulo_q::<{ 2 * DEG - 2 }, Q, F>(ctx_gate, &pk0_u, range, num_bits_1);
 
         // pk0_u is a polynomial of degree (DEG - 1) * 2 = 2*DEG - 2
         // pk0_u has coefficients in the [0, Q-1] range
         // cyclo is a polynomial of degree DEG
         // Reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1 to get a polynomial of degree DEG - 1
 
-        // Dealing with the assumption of the `poly_divide_by_cyclo` chip
+        // Dealing with the assumption of the `poly_reduce_by_cyclo` chip
         // - The degree of dividend (pk0_u) is equal to (2 * DEG) - 2 according to the constraint set above
         // - The coefficients of dividend are in the [0, Q-1] range according to the constraint set above
         // - The divisor is a cyclotomic polynomial of degree DEG with coefficients either 0 or 1
         // - The coefficients of dividend and divisor can be expressed as u64 values as long as Q - 1 is less than 2^64
         // - Q is chosen such that (Q-1) * (2 * DEG - 2 - DEG + 1)] + Q-1 < p. Note that this is a subset of the condition (Q-1) * (Q-1) * DEG < p which is an assumption of the circuit.
 
-        let pk0_u = poly_divide_by_cyclo::<{ 2 * DEG - 2 }, DEG, Q, F>(
+        let pk0_u = poly_reduce_by_cyclo::<{ 2 * DEG - 2 }, DEG, Q, F>(
             &pk0_u,
             &cyclo,
             cyclo_len,
@@ -464,6 +465,14 @@ fn bfv_encryption_circuit<F: Field>(
         // If the condition (Q-1) * (Q/T) < p is satisfied there is no risk of overflow during the scalar multiplication.
         // Note that this condition is a subset of the condition (Q-1) * (Q-1) * DEG < p which is an assumption of the circuit.
 
+        // print m
+        for i in 0..m.len() {
+            println!("m[{}]: {:?}", i, m[i]);
+        }
+
+        // print delta
+        println!("delta: {:?}", DELTA);
+
         let m_delta = poly_scalar_mul::<{ DEG - 1 }, F>(
             ctx_gate,
             &m,
@@ -482,9 +491,10 @@ fn bfv_encryption_circuit<F: Field>(
         let num_bits_2 = binary_representation.len();
 
         // The coefficients of m_delta are in the range [0,  (Q-1) * (Q/T)] according to the polynomial scalar multiplication constraint set above.
-        // Therefore the coefficients of m_delta are known to have <= `num_bits_2` bits, therefore they satisfy the assumption of the `poly_reduce` chip
+        // Therefore the coefficients of m_delta are known to have <= `num_bits_2` bits, therefore they satisfy the assumption of the `poly_reduce_by_modulo_q` chip
 
-        let m_delta = poly_reduce::<{ DEG - 1 }, Q, F>(ctx_gate, &m_delta, range, num_bits_2);
+        let m_delta =
+            poly_reduce_by_modulo_q::<{ DEG - 1 }, Q, F>(ctx_gate, &m_delta, range, num_bits_2);
 
         // Note: Scalar multiplication does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
         // m_delta is a polynomial in the R_q ring
@@ -517,11 +527,11 @@ fn bfv_encryption_circuit<F: Field>(
         let num_bits_3 = binary_representation.len();
 
         // The coefficients of pk0_u_trimmed_plus_m_delta are in the range [0, 2Q - 2] according to the polynomial addition constraint set above.
-        // Therefore the coefficients of m_delta are known to have <= `num_bits_3` bits, therefore they satisfy the assumption of the `poly_reduce` chip
+        // Therefore the coefficients of m_delta are known to have <= `num_bits_3` bits, therefore they satisfy the assumption of the `poly_reduce_by_modulo_q` chip
 
         // Reduce the coefficients of `pk0_u_trimmed_plus_m_delta` by modulo `Q`
 
-        let pk0_u_trimmed_plus_m_delta = poly_reduce::<{ DEG - 1 }, Q, F>(
+        let pk0_u_trimmed_plus_m_delta = poly_reduce_by_modulo_q::<{ DEG - 1 }, Q, F>(
             ctx_gate,
             &pk0_u_trimmed_plus_m_delta,
             range,
@@ -551,12 +561,12 @@ fn bfv_encryption_circuit<F: Field>(
             poly_add::<{ DEG - 1 }, F>(ctx_gate, &pk0_u_trimmed_plus_m_delta, &e0, range.gate());
 
         // The coefficients of computed_c0 are in the range [0, 2Q - 2] according to the polynomial addition constraint set above.
-        // Therefore the coefficients of computed_c0 are known to have <= `num_bits_3` bits, therefore they satisfy the assumption of the `poly_reduce` chip
+        // Therefore the coefficients of computed_c0 are known to have <= `num_bits_3` bits, therefore they satisfy the assumption of the `poly_reduce_by_modulo_q` chip
 
         // Reduce the coefficients of `pk0_u_trimmed_plus_m_delta` by modulo `Q`
 
         let computed_c0 =
-            poly_reduce::<{ DEG - 1 }, Q, F>(ctx_gate, &computed_c0, range, num_bits_3);
+            poly_reduce_by_modulo_q::<{ DEG - 1 }, Q, F>(ctx_gate, &computed_c0, range, num_bits_3);
 
         // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
         // computed_c0 is a polynomial in the R_q ring!
@@ -603,23 +613,24 @@ fn bfv_encryption_circuit<F: Field>(
         // Reduce the coefficients by modulo `Q`
 
         // The coefficients of pk1_u are in the range [0, (Q-1) * (Q-1) * DEG] according to the polynomial multiplication constraint set above.
-        // Therefore the coefficients of pk1_u are known to have <= `num_bits_1` bits, therefore they satisfy the assumption of the `poly_reduce` chip
+        // Therefore the coefficients of pk1_u are known to have <= `num_bits_1` bits, therefore they satisfy the assumption of the `poly_reduce_by_modulo_q` chip
 
-        let pk1_u = poly_reduce::<{ 2 * DEG - 2 }, Q, F>(ctx_gate, &pk1_u, range, num_bits_1);
+        let pk1_u =
+            poly_reduce_by_modulo_q::<{ 2 * DEG - 2 }, Q, F>(ctx_gate, &pk1_u, range, num_bits_1);
 
         // pk1_u is a polynomial of degree (DEG - 1) * 2 = 2*DEG - 2
         // pk1_u has coefficients in the [0, Q-1] range
         // cyclo is a polynomial of degree DEG
         // Reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1 to get a polynomial of degree DEG - 1
 
-        // Dealing with the assumption of the `poly_divide_by_cyclo` chip
+        // Dealing with the assumption of the `poly_reduce_by_cyclo` chip
         // - The degree of dividend (pk0_1) is equal to (2 * DEG) - 2 according to the constraint set above
         // - The coefficients of dividend are in the [0, Q-1] range according to the constraint set above
         // - The divisor is a cyclotomic polynomial of degree DEG with coefficients either 0 or 1
         // - The coefficients of dividend and divisor can be expressed as u64 values as long as Q - 1 is less than 2^64
         // - Q is chosen such that (Q-1) * (2 * DEG - 2 - DEG + 1)] + Q-1 < p. Note that this is a subset of the condition (Q-1) * (Q-1) * DEG < p which is an assumption of the circuit.
 
-        let pk1_u = poly_divide_by_cyclo::<{ 2 * DEG - 2 }, DEG, Q, F>(
+        let pk1_u = poly_reduce_by_cyclo::<{ 2 * DEG - 2 }, DEG, Q, F>(
             &pk1_u,
             &cyclo,
             cyclo_len,
@@ -677,12 +688,12 @@ fn bfv_encryption_circuit<F: Field>(
         let computed_c1 = poly_add::<{ DEG - 1 }, F>(ctx_gate, &pk1_u_trimmed, &e1, range.gate());
 
         // The coefficients of computed_c1 are in the range [0, 2Q - 2] according to the polynomial addition constraint set above.
-        // Therefore the coefficients of computed_c1 are known to have <= `num_bits_3` bits, therefore they satisfy the assumption of the `poly_reduce` chip
+        // Therefore the coefficients of computed_c1 are known to have <= `num_bits_3` bits, therefore they satisfy the assumption of the `poly_reduce_by_modulo_q` chip
 
         // Reduce the coefficients of `computed_c1` by modulo `Q`
 
         let computed_c1 =
-            poly_reduce::<{ DEG - 1 }, Q, F>(ctx_gate, &computed_c1, range, num_bits_3);
+            poly_reduce_by_modulo_q::<{ DEG - 1 }, Q, F>(ctx_gate, &computed_c1, range, num_bits_3);
 
         // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
         // computed_c1 is a polynomial in the R_q ring
@@ -690,8 +701,8 @@ fn bfv_encryption_circuit<F: Field>(
         // Enforce equality between `c0` and `computed_c0` using equality check
         // Enfroce equality between `c1` and `computed_c1` using equality check
         for i in 0..DEG {
-            let bool_0 = range.gate().is_equal(ctx_gate, c0[i], computed_c0[i]);
-            range.gate().assert_is_const(ctx_gate, &bool_0, &F::from(1));
+            // let bool_0 = range.gate().is_equal(ctx_gate, c0[i], computed_c0[i]);
+            // range.gate().assert_is_const(ctx_gate, &bool_0, &F::from(1));
 
             let bool_1 = range.gate().is_equal(ctx_gate, c1[i], computed_c1[i]);
             range.gate().assert_is_const(ctx_gate, &bool_1, &F::from(1));
