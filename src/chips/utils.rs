@@ -1,7 +1,8 @@
-use halo2_base::{utils::ScalarField, AssignedValue};
+use halo2_base::utils::ScalarField;
 use num_bigint::BigInt;
 use num_integer::Integer;
 use num_traits::identities::Zero;
+use num_traits::Num;
 
 /// Performs long polynomial division on two polynomials
 /// Returns the quotient and remainder
@@ -9,7 +10,7 @@ use num_traits::identities::Zero;
 /// * Input polynomials are parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
 /// * DEG_DVD is the degree of the dividend
 /// * DEG_DVS is the degree of the divisor
-/// * Q is the modulus of the Ring. All the coefficients will be in the range [0, Q-1]
+/// * Q is the modulus of the Ring. All the coefficients of `quotient` and `remainder` will be in the range [0, Q-1]
 pub fn div_euclid<const DEG_DVD: usize, const DEG_DVS: usize, const Q: u64>(
     dividend: &Vec<BigInt>,
     divisor: &Vec<BigInt>,
@@ -65,19 +66,6 @@ pub fn div_euclid<const DEG_DVD: usize, const DEG_DVS: usize, const Q: u64>(
     (quotient, remainder)
 }
 
-/// Convert a vector of AssignedValue to a vector of BigInt
-///
-pub fn vec_assigned_to_vec_big_int<F: ScalarField>(vec: &Vec<AssignedValue<F>>) -> Vec<BigInt> {
-    let mut vec_big_int = Vec::new();
-
-    for i in 0..vec.len() {
-        let value_bytes_le = vec[i].value().to_bytes_le();
-        let value_big_int = BigInt::from_bytes_le(num_bigint::Sign::Plus, &value_bytes_le);
-        vec_big_int.push(value_big_int);
-    }
-    vec_big_int
-}
-
 /// Performs polynomial multiplication on two polynomials using direct method
 /// Returns the product of the input polynomials
 ///
@@ -88,12 +76,12 @@ pub fn poly_mul(a: &Vec<BigInt>, b: &Vec<BigInt>) -> Vec<BigInt> {
     let deg_c = deg_a + deg_b;
 
     // initialize the output polynomial with zeroes
-    let mut c = vec![BigInt::from(0 as u64); deg_c + 1];
+    let mut c = vec![BigInt::from(0_u64); deg_c + 1];
 
     // perform polynomial multiplication
     for i in 0..=deg_a {
         for j in 0..=deg_b {
-            c[i + j] += BigInt::from(a[i].clone()) * BigInt::from(b[j].clone());
+            c[i + j] += a[i].clone() * b[j].clone();
         }
     }
 
@@ -119,11 +107,13 @@ pub fn reduce_poly_by_modulo_q<const Q: u64>(poly: &Vec<BigInt>) -> Vec<BigInt> 
     reduced_poly
 }
 
-pub fn vec_u64_to_vec_bigint(vec: &Vec<u64>) -> Vec<BigInt> {
+/// Transfor Vec<String> to Vec<BigInt>
+pub fn vec_string_to_vec_bigint(vec: &Vec<String>) -> Vec<BigInt> {
     let mut vec_bigint = Vec::new();
 
-    for i in 0..vec.len() {
-        vec_bigint.push(BigInt::from(vec[i]));
+    for item in vec {
+        let bigint = BigInt::from_str_radix(item, 10).unwrap();
+        vec_bigint.push(bigint);
     }
 
     vec_bigint

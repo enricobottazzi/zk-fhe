@@ -112,8 +112,8 @@ pub fn poly_scalar_mul<const DEG: usize, F: Field>(
 
     let mut c = vec![];
 
-    for i in 0..=DEG {
-        let val = gate.mul(ctx, a[i], *b);
+    for item in a.iter().take(DEG + 1) {
+        let val = gate.mul(ctx, *item, *b);
         c.push(val);
     }
 
@@ -149,29 +149,6 @@ pub fn poly_reduce_by_modulo_q<const DEG: usize, const Q: u64, F: Field>(
     assert_eq!(rem_assigned.len() - 1, DEG);
 
     rem_assigned
-}
-
-/// Takes a polynomial represented by its coefficients in a vector of u64 and output the same polynomial represented by its coefficients in a vector of assigned values
-/// The generic parameter DEG enforce that the degree of the output polynomial is equal to DEG
-pub fn poly_u64_assign<const DEG: usize, F: Field>(
-    ctx: &mut Context<F>,
-    poly: &Vec<u64>,
-) -> Vec<AssignedValue<F>> {
-    // assert that the degree of the input polynomial is equal to DEG
-    assert_eq!(poly.len() - 1, DEG);
-
-    let mut output = vec![];
-
-    for &item in poly.iter().take(DEG + 1) {
-        let val = F::from(item);
-        let assigned_val = ctx.load_witness(val);
-        output.push(assigned_val);
-    }
-
-    // assert that the degree of the output polynomial is equal to DEG - Note: this is not a constraint but a sanity check
-    assert_eq!(output.len() - 1, DEG);
-
-    output
 }
 
 /// Takes a polynomial represented by its coefficients in a vector of BigInt and output the same polynomial represented by its coefficients in a vector of assigned values of length DEG + 1

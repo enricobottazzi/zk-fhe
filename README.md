@@ -42,7 +42,7 @@ Using the same proving key, you can generate proofs for the same ZK circuit on d
 
 **Proof Verification**
 
-`cargo run --example bfv -- --name bfv -k 9 verify`
+`cargo run --example bfv -- --name bfv -k 9 --input bfv.in verify`
 
 Verify the proof generated above
 
@@ -72,4 +72,10 @@ const DEG: usize = 1024;
 const Q: u64 = 536870909;
 ```
 
-Then run the same commands as above modifying the input file name to `bfv_2.in` and the degree to `-k 18`.
+Then run the following commands:
+
+```bash
+cargo run --example bfv -- --name bfv -k 18 --input bfv_2.in keygen
+cargo run --example bfv -- --name bfv -k 18 --input bfv_2.in prove
+cargo run --example bfv -- --name bfv -k 18 --input bfv_2.in verify
+```
