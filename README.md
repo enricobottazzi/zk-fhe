@@ -62,8 +62,8 @@ Verify the proof generated above
 
 ## Benchmarks
 
-- **Proving time: 37s** 
-- **Verification time: 246ms**
+- **Proving time: 9.5s** 
+- **Verification time: 312ms**
 
 Benches run using `bfv_2` run on M2 Macbook Pro with 12 cores and 32GB of RAM.
 
@@ -79,7 +79,7 @@ const Q: u64 = 536870909;
 Then run the following commands:
 
 ```bash
-cargo run --example bfv -- --name bfv -k 18 --input bfv_2.in keygen
-cargo run --example bfv -- --name bfv -k 18 --input bfv_2.in prove
-cargo run --example bfv -- --name bfv -k 18 --input bfv_2.in verify
+cargo run --example bfv -- --name bfv -k 13 --input bfv_2.in keygen
+cargo run --example bfv -- --name bfv -k 13 --input bfv_2.in prove
+cargo run --example bfv -- --name bfv -k 13 --input bfv_2.in verify
 ```
