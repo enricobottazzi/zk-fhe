@@ -9,9 +9,9 @@ use halo2_base::{
 /// Enforce that polynomial a of degree DEG has coefficients in the range [0, Z] or [Q-Z, Q-1]
 ///
 /// * DEG is the degree of the polynomial
-/// * Q is the modulus of the ring R_q (cipher text space)
+/// * Q is the modulus of the ring R_q (ciphertext space)
 /// * Z is the constant that defines the range
-/// * Assumes that Z < Q
+/// * Assumption: Z < Q
 pub fn check_poly_coefficients_in_range<const DEG: usize, const Q: u64, const Z: u64, F: Field>(
     ctx: &mut Context<F>,
     a: &Vec<AssignedValue<F>>,
@@ -19,6 +19,7 @@ pub fn check_poly_coefficients_in_range<const DEG: usize, const Q: u64, const Z:
 ) {
     // assert that the degree of the polynomial a is equal to DEG
     assert_eq!(a.len() - 1, DEG);
+    assert!(Z < Q);
 
     // The goal is to check that coeff is in the range [0, Z] OR [Q-Z, Q-1]
     // We split this check into two checks:

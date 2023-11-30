@@ -5,6 +5,14 @@ Implementation based on [Revisiting Homomorphic Encryption Schemes for Finite Fi
 
 The application is not production ready and is only meant to be used for educational purposes.
 
+## Disclaimer
+
+This is a research project and is not meant to be used in production. The code is not audited.
+
+## Guide
+
+Many polynomial operations performed inside the [circuit](./examples/bfv.rs) involve careful handling of coefficients in order to avoid overflows. A thorough explanation of the range of expansion of polynomial coefficients during this operations can be found in [Polynomial Coefficients and Degree Analysis](https://hackmd.io/@letargicus/Bk4KtYkSp)
+
 ## Quick Start
 
 **Mock Prover**
@@ -38,7 +46,7 @@ Using the same proving key, you can generate proofs for the same ZK circuit on d
 
 **Proof Verification**
 
-`cargo run --example bfv -- --name bfv -k 9 verify`
+`cargo run --example bfv -- --name bfv -k 9 --input bfv.in verify`
 
 Verify the proof generated above
 
@@ -47,16 +55,15 @@ Verify the proof generated above
 - `check_poly_coefficients_in_range` - Enforces polynomial coefficients to be within a specified range
 - `check_poly_from_distribution_chi_key` - Enforces polynomial to be sampled from the chi key
 - `poly_add` - Enforces polynomial addition
-- `poly_mul_equal_deg` - Enforces polynomial multiplication between polynomials of equal degree
-- `poly_mul_diff_deg` - Enforces polynomial multiplication between polynomials of different degree
+- `constrain_poly_mul` - Constrain polynomial multiplication
 - `poly_scalar_mul` - Enforces scalar multiplication of a polynomial
-- `poly_reduce` - Enforces reduction of polynomial coefficients by a modulus
-- `poly_divide_by_cyclo` - Enforces the reduction of a polynomial by a cyclotomic polynomial
+- `poly_reduce_by_modulo_q` - Enforces reduction of polynomial coefficients by a modulus
+- `constraint_poly_reduction_by_cyclo` - Constrain polynomial reduction by a cyclotomic polynomial
 
 ## Benchmarks
 
-- **Proving time: 61s** 
-- **Verification time: 261ms**
+- **Proving time: 9.5s** 
+- **Verification time: 312ms**
 
 Benches run using `bfv_2` run on M2 Macbook Pro with 12 cores and 32GB of RAM.
 
@@ -69,4 +76,10 @@ const DEG: usize = 1024;
 const Q: u64 = 536870909;
 ```
 
-Then run the same commands as above modifying the input file name to `bfv_2.in` and the degree to `-k 18`.
+Then run the following commands:
+
+```bash
+cargo run --example bfv -- --name bfv -k 13 --input bfv_2.in keygen
+cargo run --example bfv -- --name bfv -k 13 --input bfv_2.in prove
+cargo run --example bfv -- --name bfv -k 13 --input bfv_2.in verify
+```
