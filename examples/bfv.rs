@@ -51,7 +51,7 @@ use zk_fhe::chips::PolyWithLength;
 /// * `cyclo` must be the cyclotomic polynomial of degree `DEG` in the form x^DEG + 1
 /// * `pk0` and `pk1` must be polynomials in the R_q ring. The ring R_q is defined as R_q = Z_q[x]/(x^DEG + 1)
 /// *  Q and DEG must be chosen such that (Q-1) * (Q-1) * (DEG+1) + (Q-1) < p, where p is the modulus of the circuit field to avoid overflow during polynomial addition inside the circuit
-/// *  Q and T must be chosen such that (Q-1) * (Q/T) < p, where p is the modulus of the circuit field. This is required to avoid overflow during polynomial scalar multiplication inside the circuit
+/// *  Q, T must be chosen such that (Q-1) * (Q-T) + (Q-1) + (Q-1) < p, where p is the modulus of the circuit field.. This is required to avoid overflow during polynomial scalar multiplication inside the circuit
 /// *  Q must be chosen such that 2Q - 2 < p, where p is the modulus of the circuit field. This is required to avoid overflow during polynomial addition inside the circuit
 
 // For real world applications, the parameters should be chosen according to the security level required.
@@ -489,7 +489,7 @@ fn bfv_encryption_circuit<F: Field>(
         // `pk0_u_trimmed_plus_m_delta` has coefficients in the [0, (Q-1) * (Q-T) + (Q-1)] range according to the constraint set above
         // `e0` has coefficients in the [0, B] OR [Q-B, Q-1] range according to the constraint set above
         // The coefficients of computed_c0 are in the [0, (Q-1) * (Q-T) + (Q-1) + (Q-1)] range. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Addition section
-        // Q, T and B must be chosen such that (Q-1) * (Q-T) + (Q-1) + (Q-1) < p, where p is the modulus of the circuit field.
+        // Q, T must be chosen such that (Q-1) * (Q-T) + (Q-1) + (Q-1) < p, where p is the modulus of the circuit field.
         let computed_c0 =
             poly_add::<{ DEG - 1 }, F>(ctx_gate, &pk0_u_trimmed_plus_m_delta, &e0, range.gate());
 
@@ -500,7 +500,7 @@ fn bfv_encryption_circuit<F: Field>(
             "{:b}",
             (q_minus_1.clone() * q_minus_t + q_minus_1.clone() + q_minus_1)
         );
-        let num_bits_4 = binary_representation.len();
+        let num_bits_3 = binary_representation.len();
 
         // Coefficients of computed_c0 are in the [0, (Q-1) * (Q-T) + (Q-1) + (Q-1)] range according to the polynomial addition constraint set above.
         // Therefore the coefficients of computed_c0 are known to have <= `num_bits_4` bits, therefore they satisfy the assumption of the `poly_reduce_by_modulo_q` chip
@@ -508,7 +508,7 @@ fn bfv_encryption_circuit<F: Field>(
         // 1.8 Reduce the coefficients of `pk0_u_trimmed_plus_m_delta` by modulo `Q`
 
         let computed_c0 =
-            poly_reduce_by_modulo_q::<{ DEG - 1 }, Q, F>(ctx_gate, &computed_c0, range, num_bits_4);
+            poly_reduce_by_modulo_q::<{ DEG - 1 }, Q, F>(ctx_gate, &computed_c0, range, num_bits_3);
 
         // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
         // computed_c0 is a polynomial in the R_q ring!
@@ -605,15 +605,15 @@ fn bfv_encryption_circuit<F: Field>(
         // get the number of bits needed to represent the value of 2Q - 2
         // get the number of bits needed to represent the value of 2Q - 2
         let binary_representation = format!("{:b}", (2 * Q - 2));
-        let num_bits_3 = binary_representation.len();
+        let num_bits_4 = binary_representation.len();
 
         // The coefficients of computed_c1 are in the range [0, 2Q - 2] according to the polynomial addition performed above.
-        // Therefore the coefficients of computed_c1 are known to have <= `num_bits_3` bits, therefore they satisfy the assumption of the `poly_reduce_by_modulo_q` chip
+        // Therefore the coefficients of computed_c1 are known to have <= `num_bits_4` bits, therefore they satisfy the assumption of the `poly_reduce_by_modulo_q` chip
 
         // 2.6 Reduce the coefficients of `computed_c1` by modulo `Q`
 
         let computed_c1 =
-            poly_reduce_by_modulo_q::<{ DEG - 1 }, Q, F>(ctx_gate, &computed_c1, range, num_bits_3);
+            poly_reduce_by_modulo_q::<{ DEG - 1 }, Q, F>(ctx_gate, &computed_c1, range, num_bits_4);
 
         // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
         // computed_c1 is a polynomial in the R_q ring
