@@ -5,7 +5,7 @@ use axiom_eth::Field;
 use halo2_base::{
     gates::{GateChip, GateInstructions},
     safe_types::{RangeChip, RangeInstructions},
-    AssignedValue, Context, QuantumCell,
+    AssignedValue, Context,
     QuantumCell::*,
 };
 use num_bigint::BigInt;
@@ -50,6 +50,8 @@ pub fn poly_add<const DEG: usize, F: Field>(
 /// This algorithm takes O(N) constraints as it requires to:
 /// - Evaluate the polynomials a, b and c at gamma (3N constraints)
 /// - Enforce the identity a(gamma) * b(gamma) - c(gamma) = 0 (1 constraint)
+///
+/// Note that the constraint will fail if the coefficients of the resulting polynomial c overflows the prime field p.
 pub fn constrain_poly_mul<F: Field>(
     a_assigned_with_length: PolyWithLength<F>,
     b_assigned_with_length: PolyWithLength<F>,
@@ -100,11 +102,11 @@ pub fn constrain_poly_mul<F: Field>(
 ///
 /// * DEG is the degree of the polynomial
 /// * Input polynomial is parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
-/// * Assumption: the coefficients are constrained such to avoid overflow during the polynomial multiplication
+/// * Assumption: the coefficients are constrained such to avoid overflow during the polynomial scalar multiplication
 pub fn poly_scalar_mul<const DEG: usize, F: Field>(
     ctx: &mut Context<F>,
     a: &Vec<AssignedValue<F>>,
-    b: &QuantumCell<F>,
+    b: &AssignedValue<F>,
     gate: &GateChip<F>,
 ) -> Vec<AssignedValue<F>> {
     // assert that the degree of the polynomial a is equal to DEG
@@ -186,9 +188,9 @@ pub fn poly_big_int_assign<const DEG: usize, F: Field>(
 /// * DEG_DVS is the degree of the divisor polynomial (cyclo)
 /// * Q is the modulus of the ring R_q (cipher text space)
 ///
-/// * Assumption: the coefficients are constrained such to avoid overflow during the polynomial addition between `quotient_times_cyclo` and `remainder`
 /// * Assumption: the coefficients of quotient have to be in the range [0, Q - 1]
 /// * Assumption: the coefficients of remainder have to be in the range [0, Q - 1]
+/// * Assumption: the coefficients are constrained such to avoid overflow during the polynomial addition between `quotient_times_cyclo` and `remainder`
 pub fn constrain_poly_reduction_by_cyclo<
     const DEG_DVD: usize,
     const DEG_DVS: usize,

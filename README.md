@@ -9,6 +9,10 @@ The application is not production ready and is only meant to be used for educati
 
 This is a research project and is not meant to be used in production. The code is not audited.
 
+## Guide
+
+Many polynomial operations performed inside the [circuit](./examples/bfv.rs) involve careful handling of coefficients in order to avoid overflows. A thorough explanation of the range of expansion of polynomial coefficients during this operations can be found in [Polynomial Coefficients and Degree Analysis](https://hackmd.io/@letargicus/Bk4KtYkSp)
+
 ## Quick Start
 
 **Mock Prover**

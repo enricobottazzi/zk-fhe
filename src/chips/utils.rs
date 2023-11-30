@@ -1,6 +1,5 @@
 use halo2_base::utils::ScalarField;
 use num_bigint::BigInt;
-use num_integer::Integer;
 use num_traits::identities::Zero;
 use num_traits::Num;
 
@@ -10,8 +9,7 @@ use num_traits::Num;
 /// * Input polynomials are parsed as a vector of assigned coefficients [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
 /// * DEG_DVD is the degree of the dividend
 /// * DEG_DVS is the degree of the divisor
-/// * Q is the modulus of the Ring. All the coefficients of `quotient` and `remainder` will be in the range [0, Q-1]
-pub fn div_euclid<const DEG_DVD: usize, const DEG_DVS: usize, const Q: u64>(
+pub fn div_euclid<const DEG_DVD: usize, const DEG_DVS: usize>(
     dividend: &Vec<BigInt>,
     divisor: &Vec<BigInt>,
 ) -> (Vec<BigInt>, Vec<BigInt>) {
@@ -38,8 +36,7 @@ pub fn div_euclid<const DEG_DVD: usize, const DEG_DVS: usize, const Q: u64>(
         quotient.push(leading_coefficient_ratio.clone());
 
         for (i, coeff) in divisor.iter().enumerate() {
-            dividend[i] =
-                (&dividend[i] - &(&leading_coefficient_ratio * coeff)).mod_floor(&BigInt::from(Q));
+            dividend[i] = &dividend[i] - &(&leading_coefficient_ratio * coeff);
         }
 
         dividend.remove(0);
