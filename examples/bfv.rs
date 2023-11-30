@@ -459,7 +459,7 @@ fn bfv_encryption_circuit<F: Field>(
 
         // Perform the polynomial scalar multiplication between m and delta.
         // The assumption of the `poly_scalar_mul` chip is that the coefficients of the input polynomials are constrained such to avoid overflow during the polynomial scalar multiplication
-        // m has coefficients in the [0, T/2] OR [Q - T/2, Q - 1] range according to the constraint just set above
+        // m has coefficients in the [0, T/2] OR [Q - T/2, Q - 1] range according to the constraint set above
         // delta is a constant equal to Q/T rounded to the lower integer from BFV paper
         // The coefficients of m_delta are in the [0, (Q-1) * (Q/T)] range. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Scalar Multiplication section
         // Q and T must be chosen such that (Q-1) * (Q/T) < p, where p is the modulus of the circuit field.
@@ -468,71 +468,47 @@ fn bfv_encryption_circuit<F: Field>(
 
         // m_delta is a polynomial of degree DEG - 1
 
-        // 1.6 Reduce the coefficients of `m_delta` by modulo `Q`
-
-        // get the number of bits needed to represent the value of (Q-1) * (Q/T)
-
-        let binary_representation = format!("{:b}", ((Q - 1) * (Q / T)));
-        let num_bits_2 = binary_representation.len();
-
-        // The coefficients of m_delta are in the range [0,  (Q-1) * (Q/T)] according to the polynomial scalar multiplication constraint set above.
-        // Therefore the coefficients of m_delta are known to have <= `num_bits_2` bits, therefore they satisfy the assumption of the `poly_reduce_by_modulo_q` chip
-
-        let m_delta =
-            poly_reduce_by_modulo_q::<{ DEG - 1 }, Q, F>(ctx_gate, &m_delta, range, num_bits_2);
-
-        // Note: Scalar multiplication does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
-        // m_delta is a polynomial in the R_q ring
-
-        // 1.7 pk0_u_trimmed + m_delta
+        // 1.6 pk0_u_trimmed + m_delta
 
         // Perform the polynomial addition between pk0_u_trimmed and m_delta.
         // The assumption of the `poly_add` chip is that the coefficients of the input polynomials are constrained such to avoid overflow during the polynomial addition
-        // `m_delta` has coefficients in the [0, Q-1] range according to the constraint just set above
-        // `pk0_u_trimmed` has coefficients in the [0, Q-1] range according to the constraint just set above
-        // The coefficients of pk0_u_trimmed_plus_m_delta are in the [0, 2Q - 2] range. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Addition section
-        // Q must be chosen such that 2Q - 2 < p, where p is the modulus of the circuit field.
+        // `m_delta` has coefficients in the [0, (Q-1) * (Q/T)] range according to the constraint set above
+        // `pk0_u_trimmed` has coefficients in the [0, Q-1] range according to the constraint set above
+        // The coefficients of pk0_u_trimmed_plus_m_delta are in the [0, (Q-1) * (Q-T) + (Q-1)] range. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Addition section
+        // Q and T must be chosen such that (Q-1) * (Q-T) + (Q-1) < p, where p is the modulus of the circuit field.
         let pk0_u_trimmed_plus_m_delta =
             poly_add::<{ DEG - 1 }, F>(ctx_gate, &pk0_u_trimmed, &m_delta, range.gate());
-
-        // 1.8 Reduce the coefficients of `pk0_u_trimmed_plus_m_delta` by modulo `Q`
-
-        // get the number of bits needed to represent the value of 2Q - 2
-
-        let binary_representation = format!("{:b}", (2 * Q - 2));
-        let num_bits_3 = binary_representation.len();
-
-        // The coefficients of pk0_u_trimmed_plus_m_delta are in the range [0, 2Q - 2] according to the polynomial addition constraint set above.
-        // Therefore the coefficients of m_delta are known to have <= `num_bits_3` bits, therefore they satisfy the assumption of the `poly_reduce_by_modulo_q` chip
-
-        let pk0_u_trimmed_plus_m_delta = poly_reduce_by_modulo_q::<{ DEG - 1 }, Q, F>(
-            ctx_gate,
-            &pk0_u_trimmed_plus_m_delta,
-            range,
-            num_bits_3,
-        );
 
         // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
         // pk0_u_trimmed_plus_m_delta is a polynomial in the R_q ring
 
-        // 1.9 c0 = pk0_u_trimmed_plus_m_delta + e0
+        // 1.7 c0 = pk0_u_trimmed_plus_m_delta + e0
 
         // Perform the polynomial addition between pk0_u_trimmed_plus_m_delta and e0.
         // The assumption of the `poly_add` chip is that the coefficients of the input polynomials are constrained such to avoid overflow during the polynomial addition
-        // `pk0_u_trimmed_plus_m_delta` has coefficients in the [0, Q-1] range according to the constraint just set above
-        // `e0` has coefficients in the [0, b] OR [q-b, q-1] range according to the constraint just set above
-        // The coefficients of computed_c0 are in the [0, 2Q - 2] range. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Addition section
-        // Q must be chosen such that 2Q - 2 < p, where p is the modulus of the circuit field.
+        // `pk0_u_trimmed_plus_m_delta` has coefficients in the [0, (Q-1) * (Q-T) + (Q-1)] range according to the constraint set above
+        // `e0` has coefficients in the [0, B] OR [Q-B, Q-1] range according to the constraint set above
+        // The coefficients of computed_c0 are in the [0, (Q-1) * (Q-T) + (Q-1) + (Q-1)] range. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Addition section
+        // Q, T and B must be chosen such that (Q-1) * (Q-T) + (Q-1) + (Q-1) < p, where p is the modulus of the circuit field.
         let computed_c0 =
             poly_add::<{ DEG - 1 }, F>(ctx_gate, &pk0_u_trimmed_plus_m_delta, &e0, range.gate());
 
-        // Coefficients of computed_c0 are in the [0, 2Q - 2] range according to the polynomial addition constraint set above.
-        // Therefore the coefficients of computed_c0 are known to have <= `num_bits_3` bits, therefore they satisfy the assumption of the `poly_reduce_by_modulo_q` chip
+        // get the number of bits needed to represent the value of (Q-1) * (Q-T) + (Q-1) + (Q-1)
+        let q_minus_1 = BigInt::from(Q) - BigInt::from(1u32);
+        let q_minus_t = BigInt::from(Q) - BigInt::from(T as u32);
+        let binary_representation = format!(
+            "{:b}",
+            (q_minus_1.clone() * q_minus_t + q_minus_1.clone() + q_minus_1)
+        );
+        let num_bits_4 = binary_representation.len();
 
-        // 1.10 Reduce the coefficients of `pk0_u_trimmed_plus_m_delta` by modulo `Q`
+        // Coefficients of computed_c0 are in the [0, (Q-1) * (Q-T) + (Q-1) + (Q-1)] range according to the polynomial addition constraint set above.
+        // Therefore the coefficients of computed_c0 are known to have <= `num_bits_4` bits, therefore they satisfy the assumption of the `poly_reduce_by_modulo_q` chip
+
+        // 1.8 Reduce the coefficients of `pk0_u_trimmed_plus_m_delta` by modulo `Q`
 
         let computed_c0 =
-            poly_reduce_by_modulo_q::<{ DEG - 1 }, Q, F>(ctx_gate, &computed_c0, range, num_bits_3);
+            poly_reduce_by_modulo_q::<{ DEG - 1 }, Q, F>(ctx_gate, &computed_c0, range, num_bits_4);
 
         // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
         // computed_c0 is a polynomial in the R_q ring!
@@ -620,11 +596,16 @@ fn bfv_encryption_circuit<F: Field>(
 
         // Perform the polynomial addition between pk1_u_trimmed and e1.
         // The assumption of the `poly_add` chip is that the coefficients of the input polynomials are constrained such to avoid overflow during the polynomial addition
-        // `pk1_u_trimmed` has coefficients in the [0, Q-1] range according to the constraint just set above
-        // `e1` has coefficients in the [0, b] OR [q-b, q-1] range according to the constraint just set above
+        // `pk1_u_trimmed` has coefficients in the [0, Q-1] range according to the constraint set above
+        // `e1` has coefficients in the [0, B] OR [Q-B, Q-1] range according to the constraint set above
         // The coefficients of computed_c1 are in the [0, 2Q - 2] range. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Addition section
         // Q must be chosen such that 2Q - 2 < p, where p is the modulus of the circuit field.
         let computed_c1 = poly_add::<{ DEG - 1 }, F>(ctx_gate, &pk1_u_trimmed, &e1, range.gate());
+
+        // get the number of bits needed to represent the value of 2Q - 2
+        // get the number of bits needed to represent the value of 2Q - 2
+        let binary_representation = format!("{:b}", (2 * Q - 2));
+        let num_bits_3 = binary_representation.len();
 
         // The coefficients of computed_c1 are in the range [0, 2Q - 2] according to the polynomial addition performed above.
         // Therefore the coefficients of computed_c1 are known to have <= `num_bits_3` bits, therefore they satisfy the assumption of the `poly_reduce_by_modulo_q` chip

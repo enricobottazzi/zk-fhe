@@ -1,5 +1,6 @@
 use halo2_base::utils::ScalarField;
 use num_bigint::BigInt;
+use num_integer::Integer;
 use num_traits::identities::Zero;
 use num_traits::Num;
 
@@ -97,7 +98,7 @@ pub fn reduce_poly_by_modulo_q<const Q: u64>(poly: &Vec<BigInt>) -> Vec<BigInt> 
     let mut reduced_poly = Vec::new();
 
     for coeff in poly {
-        let reduced_coeff = coeff % Q;
+        let reduced_coeff = coeff.mod_floor(&BigInt::from(Q));
         reduced_poly.push(reduced_coeff);
     }
 
