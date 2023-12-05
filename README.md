@@ -17,7 +17,9 @@ Many polynomial operations performed inside the [circuit](./examples/bfv.rs) inv
 
 **Mock Prover**
 
-`cargo run --example bfv -- --name bfv -k 9 --input bfv.in mock`
+```
+cargo run --example bfv -- --name bfv -k 9 --input bfv.in mock
+```
 
 The `MockProver` does not run the cryptographic prover on your circuit, but instead directly checks if constraints are satisfied. This is useful for testing purposes, and runs faster than the actual prover.
 
@@ -28,7 +30,9 @@ The `MockProver` does not run the cryptographic prover on your circuit, but inst
 
 **Key Generation**
 
-`cargo run --example bfv -- --name bfv -k 9 --input bfv.in keygen`
+```bash
+cargo run --example bfv -- --name bfv -k 9 --input bfv.in keygen
+```
 
 To generate a random universal trusted setup (for testing only!) and the proving and verifying keys for your circuit.
 
@@ -38,17 +42,15 @@ This will generate a proving key `data/bfv.pk` and a verifying key `data/bfv.vk`
 
 **Proof Generation**
 
-`cargo run --example bfv -- --name bfv -k 9  --input bfv.in prove`
-
-This creates a SNARK proof, stored as a binary file `data/bfv.snark`, using the inputs read (by default) from `data/halbfvo2_lib.in``. You can specify a different input file with the option `--input filename.in`, which would look for a file at `data/filename.in``.
-
-Using the same proving key, you can generate proofs for the same ZK circuit on different inputs using this command.
+```
+cargo run --example bfv -- --name bfv -k 9  --input bfv.in prove
+```
 
 **Proof Verification**
 
-`cargo run --example bfv -- --name bfv -k 9 --input bfv.in verify`
-
-Verify the proof generated above
+```
+cargo run --example bfv -- --name bfv -k 9 --input bfv.in verify
+```
 
 ## Chips 
 

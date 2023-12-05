@@ -64,13 +64,13 @@ use zk_fhe::chips::PolyWithLength;
 const DEG: usize = 4;
 const Q: u64 = 4637;
 const T: u64 = 7;
-const B: u64 = 18;
+const B: u64 = 19;
 
 // These are the parameters used for the real world application - to match with input file `data/bfv_2.in`
 // const DEG: usize = 1024;
 // const Q: u64 = 536870909;
 // const T: u64 = 7;
-// const B: u64 = 18;
+// const B: u64 = 19;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CircuitInput<const DEG: usize, const Q: u64, const T: u64, const B: u64> {
