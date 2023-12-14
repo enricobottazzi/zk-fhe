@@ -1,5 +1,5 @@
 use halo2_base::utils::ScalarField;
-use num_bigint::BigInt;
+use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use num_traits::identities::Zero;
 use num_traits::Num;
@@ -111,6 +111,18 @@ pub fn vec_string_to_vec_bigint(vec: &Vec<String>) -> Vec<BigInt> {
 
     for item in vec {
         let bigint = BigInt::from_str_radix(item, 10).unwrap();
+        vec_bigint.push(bigint);
+    }
+
+    vec_bigint
+}
+
+/// Transfor Vec<String> to Vec<BigUint>
+pub fn vec_string_to_vec_biguint(vec: &Vec<String>) -> Vec<BigUint> {
+    let mut vec_bigint = Vec::new();
+
+    for item in vec {
+        let bigint = BigUint::from_str_radix(item, 10).unwrap();
         vec_bigint.push(bigint);
     }
 

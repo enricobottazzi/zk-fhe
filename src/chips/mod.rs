@@ -1,3 +1,4 @@
+pub mod poly_big_int_chip;
 pub mod poly_distribution;
 pub mod poly_operations;
 pub mod utils;
