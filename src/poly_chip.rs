@@ -110,8 +110,8 @@ where
         );
     }
 
-    /// Takes a polynomial represented by its coefficients in a vector and output a new polynomial reduced by applying modulo Q to each coefficient
-    pub fn reduce_by_modulo_q<const Q: u64>(
+    /// Reduce the coefficients of the polynomial by the modulus MODULUS
+    pub fn reduce_by_modulo<const MODULUS: u64>(
         &self,
         ctx: &mut Context<F>,
         range: &RangeChip<F>,
@@ -120,18 +120,18 @@ where
         [(); DEG + 1]: Sized,
     {
         let mut output = vec![];
-        // Enforce that in_assigned[i] % Q = rem_assigned[i]
+        // Enforce that self.assigned_coefficients[i][i] % MODULUS = output[i]
         // Note that `div_mod` requires the value to be reduced to be at most `num_bits`
         let num_bits = self.max_num_bits;
         for i in 0..=DEG {
-            let rem = range
-                .div_mod(ctx, self.assigned_coefficients[i], Q, num_bits)
+            let reduced_coeff = range
+                .div_mod(ctx, self.assigned_coefficients[i], MODULUS, num_bits)
                 .1;
-            output.push(rem);
+            output.push(reduced_coeff);
         }
 
-        // `max_num_bits` of the output polynomial is equal to the number of bits of `Q` after the reduction
-        let max_num_bits = BigInt::from(Q).bits() as usize;
+        // `max_num_bits` of the output polynomial is equal to the number of bits of `MODULUS` after the reduction
+        let max_num_bits = BigInt::from(MODULUS).bits() as usize;
 
         PolyChip {
             assigned_coefficients: output.try_into().unwrap(),
@@ -139,33 +139,30 @@ where
         }
     }
 
-    /// Enforce that polynomial has coefficients in the range [0, Z] or [Q-Z, Q-1]
+    /// Enforce that polynomial has coefficients in the range [0, Z] or [Y-Z, Y-1]
     ///
-    /// # Generic parameters
-    /// * Q is the modulus of the ring R_q (ciphertext space)
-    /// * Z is the constant that defines the range
     ///
     /// # Assumptions
-    /// * Z < Q
-    pub fn check_poly_coefficients_in_range<const Q: u64, const Z: u64>(
+    /// * Z < Y
+    pub fn check_poly_coefficients_in_range<const Y: u64, const Z: u64>(
         &self,
         ctx: &mut Context<F>,
         range: &RangeChip<F>,
     ) {
-        // assert that Z < Q
-        assert!(Z < Q);
+        // assert that Z < Y
+        assert!(Z < Y);
 
-        // The goal is to check that coeff is in the range [0, Z] OR [Q-Z, Q-1]
+        // The goal is to check that coeff is in the range [0, Z] OR [Y-Z, Y-1]
         // We split this check into two checks:
         // - Check that coeff is in the range [0, Z] and store the boolean result in in_partial_range_1_vec
-        // - Check that coeff is in the range [Q-Z, Q-1] and store the boolean result in in_partial_range_2_vec
-        // We then perform (`in_partial_range_1` OR `in_partial_range_2`) to check that coeff is in the range [0, Z] OR [Q-Z, Q-1]
+        // - Check that coeff is in the range [Y-Z, Y-1] and store the boolean result in in_partial_range_2_vec
+        // We then perform (`in_partial_range_1` OR `in_partial_range_2`) to check that coeff is in the range [0, Z] OR [Y-Z, Y-1]
         // The result of this check is stored in the `in_range` vector.
         // All the boolean values in `in_range` are then enforced to be true
         let mut in_range_vec = Vec::with_capacity(DEG + 1);
 
-        // get the number of bits needed to represent the value of Q
-        let binary_representation = format!("{:b}", Q);
+        // get the number of bits needed to represent the value of Y
+        let binary_representation = format!("{:b}", Y);
         let q_bits = binary_representation.len();
 
         for coeff in self.assigned_coefficients.iter() {
@@ -180,25 +177,25 @@ where
             let in_partial_range_1 =
                 range.is_less_than(ctx, *coeff, Constant(F::from(Z + 1)), q_bits);
 
-            // Check for the range [Q-Z, Q-1]
+            // Check for the range [Y-Z, Y-1]
             // coeff is known are known to have <= `q_bits` bits according to the constraint set above
-            // Q - Z is known to have <= `q_bits` bits according to assumption of the chip
+            // Y - Z is known to have <= `q_bits` bits according to assumption of the chip
             // Therefore it satisfies the assumption of `is_less_than` chip
             let not_in_range_lower_bound =
-                range.is_less_than(ctx, *coeff, Constant(F::from(Q - Z)), q_bits);
+                range.is_less_than(ctx, *coeff, Constant(F::from(Y - Z)), q_bits);
             let in_range_lower_bound = range.gate.not(ctx, not_in_range_lower_bound);
 
             // coeff is known are known to have <= `q_bits` bits according to the constraint set above
-            // Q is known to have <= `q_bits` by definition
+            // Y is known to have <= `q_bits` by definition
             // Therefore it satisfies the assumption of `is_less_than` chip
             let in_range_upper_bound =
-                range.is_less_than(ctx, *coeff, Constant(F::from(Q)), q_bits);
+                range.is_less_than(ctx, *coeff, Constant(F::from(Y)), q_bits);
             let in_partial_range_2 =
                 range
                     .gate
                     .and(ctx, in_range_lower_bound, in_range_upper_bound);
 
-            // Combined check for [0, Z] OR [Q-Z, Q-1]
+            // Combined check for [0, Z] OR [Y-Z, Y-1]
             let in_range = range.gate.or(ctx, in_partial_range_1, in_partial_range_2);
             in_range_vec.push(in_range);
         }
@@ -210,18 +207,15 @@ where
         }
     }
 
-    /// Enforce that polynomial a of degree DEG is sampled from the distribution chi key. Namely, that the coefficients are in the range [0, 1, Q-1].
-    ///
-    /// # Generic parameters
-    /// * Q is the modulus of the ring R_q (ciphertext space)
-    pub fn check_poly_from_distribution_chi_key<const Q: u64>(
+    /// Enforce that polynomial is sampled from the distribution chi key. Namely, that the coefficients are in the range [0, 1, Z-1].
+    pub fn check_poly_from_distribution_chi_key<const Z: u64>(
         &self,
         ctx: &mut Context<F>,
         gate: &GateChip<F>,
     ) {
-        // In order to check that coeff is equal to either 0, 1 or q-1
+        // In order to check that coeff is equal to either 0, 1 or Z-1
         // The constraint that we want to enforce is:
-        // (coeff - 0) * (coeff - 1) * (coeff - (q-1)) = 0
+        // (coeff - 0) * (coeff - 1) * (coeff - (Z-1)) = 0
 
         // loop over all the coefficients of the polynomial
         for coeff in self.assigned_coefficients.iter() {
@@ -231,16 +225,16 @@ where
             // constrain (a - 1)
             let factor_2 = gate.sub(ctx, *coeff, Constant(F::from(1)));
 
-            // constrain (a - (q-1))
-            let factor_3 = gate.sub(ctx, *coeff, Constant(F::from(Q - 1)));
+            // constrain (a - (Z-1))
+            let factor_3 = gate.sub(ctx, *coeff, Constant(F::from(Z - 1)));
 
             // constrain (a - 0) * (a - 1)
             let factor_1_2 = gate.mul(ctx, factor_1, factor_2);
 
-            // constrain (a - 0) * (a - 1) * (a - (q-1))
+            // constrain (a - 0) * (a - 1) * (a - (Z-1))
             let factor_1_2_3 = gate.mul(ctx, factor_1_2, factor_3);
 
-            // constrain (a - 0) * (a - 1) * (a - (q-1)) = 0
+            // constrain (a - 0) * (a - 1) * (a - (Z-1)) = 0
             let bool = gate.is_zero(ctx, factor_1_2_3);
             gate.assert_is_const(ctx, &bool, &F::from(1));
         }

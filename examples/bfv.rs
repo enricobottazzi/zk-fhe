@@ -239,7 +239,7 @@ fn bfv_encryption_circuit<F: Field>(
             // pk0_u has coefficients in the [0, (Q-1) * (Q-1) * (N+1)] range. This is the maximum value that a coefficient of pk0_u can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Multiplication section
 
             // 1.2 Reduce the coefficients of pk0_u by modulo `Q`
-            let pk0_u = pk0_u.reduce_by_modulo_q::<{ Q }>(ctx_gate, range);
+            let pk0_u = pk0_u.reduce_by_modulo::<{ Q }>(ctx_gate, range);
 
             // pk0_u is a polynomial of degree (N - 1) * 2 = 2 * N - 2
             // pk0_u now has coefficients in the [0, Q-1] after reduction by modulo Q
