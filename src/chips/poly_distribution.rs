@@ -2,23 +2,30 @@ use axiom_eth::Field;
 use halo2_base::{
     gates::GateChip,
     safe_types::{GateInstructions, RangeChip, RangeInstructions},
-    AssignedValue, Context,
+    Context,
     QuantumCell::Constant,
 };
+use num_bigint::BigInt;
 
-/// Enforce that polynomial a of degree DEG has coefficients in the range [0, Z] or [Q-Z, Q-1]
+use crate::chips::poly_assigned::PolyAssigned;
+
+/// Enforce that polynomial has coefficients in the range [0, Z] or [Q-Z, Q-1]
 ///
+/// # Generic parameters
 /// * DEG is the degree of the polynomial
 /// * Q is the modulus of the ring R_q (ciphertext space)
 /// * Z is the constant that defines the range
-/// * Assumption: Z < Q
+///
+/// # Assumptions
+/// * Z < Q
 pub fn check_poly_coefficients_in_range<const DEG: usize, const Q: u64, const Z: u64, F: Field>(
     ctx: &mut Context<F>,
-    a: &Vec<AssignedValue<F>>,
+    a: &PolyAssigned<DEG, F>,
     range: &RangeChip<F>,
-) {
-    // assert that the degree of the polynomial a is equal to DEG
-    assert_eq!(a.len() - 1, DEG);
+) where
+    [(); DEG + 1]:,
+{
+    // assert that Z < Q
     assert!(Z < Q);
 
     // The goal is to check that coeff is in the range [0, Z] OR [Q-Z, Q-1]
@@ -34,7 +41,7 @@ pub fn check_poly_coefficients_in_range<const DEG: usize, const Q: u64, const Z:
     let binary_representation = format!("{:b}", Q);
     let q_bits = binary_representation.len();
 
-    for coeff in a {
+    for coeff in a.assigned_coefficients.iter() {
         // First of all, enforce that coefficient is in the [0, 2^q_bits] range
         let bool = range.is_less_than_safe(ctx, *coeff, (1 << q_bits as u64) + 1);
         range.gate().assert_is_const(ctx, &bool, &F::from(1));
@@ -73,25 +80,24 @@ pub fn check_poly_coefficients_in_range<const DEG: usize, const Q: u64, const Z:
     }
 }
 
-/// Enforce that polynomial a of degree DEG is sampled from the distribution chi key
+/// Enforce that polynomial a of degree DEG is sampled from the distribution chi key. Namely, that the coefficients are in the range [0, 1, Q-1].
 ///
-/// * Namely, that the coefficients are in the range [0, 1, Q-1].
+/// # Generic parameters
 /// * DEG is the degree of the polynomial
-/// * Q is the modulus of the ring R_q (cipher text space)
+/// * Q is the modulus of the ring R_q (ciphertext space)
 pub fn check_poly_from_distribution_chi_key<const DEG: usize, const Q: u64, F: Field>(
     ctx: &mut Context<F>,
-    a: &Vec<AssignedValue<F>>,
+    a: &PolyAssigned<DEG, F>,
     gate: &GateChip<F>,
-) {
-    // assert that the degree of the polynomial a is equal to DEG
-    assert_eq!(a.len() - 1, DEG);
-
+) where
+    [(); DEG + 1]:,
+{
     // In order to check that coeff is equal to either 0, 1 or q-1
     // The constraint that we want to enforce is:
     // (coeff - 0) * (coeff - 1) * (coeff - (q-1)) = 0
 
     // loop over all the coefficients of the polynomial
-    for coeff in a {
+    for coeff in a.assigned_coefficients.iter() {
         // constrain (a - 0)
         let factor_1 = gate.sub(ctx, *coeff, Constant(F::from(0)));
 
@@ -110,5 +116,34 @@ pub fn check_poly_from_distribution_chi_key<const DEG: usize, const Q: u64, F: F
         // constrain (a - 0) * (a - 1) * (a - (q-1)) = 0
         let bool = gate.is_zero(ctx, factor_1_2_3);
         gate.assert_is_const(ctx, &bool, &F::from(1));
+    }
+}
+
+/// Takes a polynomial represented by its coefficients in a vector and output a new polynomial reduced by applying modulo Q to each coefficient
+pub fn reduce_by_modulo_q<const DEG: usize, const Q: u64, F: Field>(
+    ctx: &mut Context<F>,
+    range: &RangeChip<F>,
+    poly: &PolyAssigned<DEG, F>,
+) -> PolyAssigned<DEG, F>
+where
+    [(); DEG + 1]: Sized,
+{
+    let mut output = vec![];
+    // Enforce that in_assigned[i] % Q = rem_assigned[i]
+    // Note that `div_mod` requires the value to be reduced to be at most `num_bits`
+    let num_bits = poly.max_num_bits;
+    for i in 0..=DEG {
+        let rem = range
+            .div_mod(ctx, poly.assigned_coefficients[i], Q, num_bits)
+            .1;
+        output.push(rem);
+    }
+
+    // `max_num_bits` of the output polynomial is equal to the number of bits of `Q` after the reduction
+    let max_num_bits = BigInt::from(Q).bits() as usize;
+
+    PolyAssigned {
+        assigned_coefficients: output.try_into().unwrap(),
+        max_num_bits,
     }
 }
