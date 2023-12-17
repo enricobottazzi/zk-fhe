@@ -233,7 +233,7 @@ fn bfv_encryption_circuit<F: Field>(
             // 1.1 pk0 * u
             // Constrain the polynomial multiplication between pk0 and u to be equal to pk0_u using the `constrain_poly_mul` chip
 
-            pk0.constrain_poly_mul(u, pk0_u.clone(), ctx_gate, ctx_rlc, rlc);
+            pk0.constrain_poly_mul(u.clone(), pk0_u.clone(), ctx_gate, ctx_rlc, rlc);
 
             // pk0_u is a polynomial of degree (N - 1) * 2 = 2*N - 2
             // pk0_u has coefficients in the [0, (Q-1) * (Q-1) * (N+1)] range. This is the maximum value that a coefficient of pk0_u can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Multiplication section
@@ -371,34 +371,22 @@ fn bfv_encryption_circuit<F: Field>(
             // // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `N` => x^N + 1
             // // computed_c0 is a polynomial in the R_q ring!
 
-            // // 2. COMPUTE C1 (c1 is the second ciphertext component)
+            // 2. COMPUTE C1 (c1 is the second ciphertext component)
 
-            // // 2.1 pk1 * u
-            // // Constrain the polynomial multiplication between pk1 and u to be equal to pk§_u using the `constrain_poly_mul` chip
+            // 2.1 pk1 * u
+            // Constrain the polynomial multiplication between pk1 and u to be equal to pk1_u using the `constrain_poly_mul` chip
 
-            // constrain_poly_mul(
-            //     pk1_with_length,
-            //     u_with_length,
-            //     pk1_u_with_length,
-            //     ctx_gate,
-            //     ctx_rlc,
-            //     rlc,
-            // );
+            pk1.constrain_poly_mul(u, pk1_u.clone(), ctx_gate, ctx_rlc, rlc);
 
-            // // pk1_u is a polynomial of degree (N - 1) * 2 = 2*N - 2
-            // // pk1_u has coefficients in the [0, (Q-1) * (Q-1) * (N+1)] range. This is the maximum value that a coefficient of pk0_u can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Multiplication section
+            // pk1_u is a polynomial of degree (N - 1) * 2 = 2*N - 2
+            // pk1_u has coefficients in the [0, (Q-1) * (Q-1) * (N+1)] range. This is the maximum value that a coefficient of pk0_u can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Multiplication section
 
-            // // 2.2 Reduce the coefficients by modulo `Q`
+            // 2.2 Reduce the coefficients of pk1_u by modulo `Q`
+            let pk1_u = pk1_u.reduce_by_modulo::<{ Q }>(ctx_gate, range);
 
-            // // The coefficients of pk1_u are in the range [0, (Q-1) * (Q-1) * (N+1)] according to the above analysis.
-            // // Therefore the coefficients of pk1_u are known to have <= `num_bits_1` bits, therefore satisfying the assumption of the `poly_reduce_by_modulo_q` chip
-
-            // let pk1_u =
-            //     poly_reduce_by_modulo_q::<{ 2 * N - 2 }, Q, F>(ctx_gate, &pk1_u, range, num_bits_1);
-
-            // // pk0_u is a polynomial of degree (N - 1) * 2 = 2 * N - 2
-            // // pk0_u now has coefficients in the [0, Q-1] range after reduction by modulo Q
-            // // cyclo is a polynomial of degree N
+            // pk1_u is a polynomial of degree (N - 1) * 2 = 2 * N - 2
+            // pk1_u now has coefficients in the [0, Q-1] after reduction by modulo Q
+            // cyclo is a polynomial of degree N
 
             // // 2.3 Reduce pk1_u by the cyclo polynomial
 

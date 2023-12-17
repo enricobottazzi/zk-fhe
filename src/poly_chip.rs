@@ -110,7 +110,7 @@ where
         );
     }
 
-    /// Reduce the coefficients of the polynomial by the modulus MODULUS
+    /// Reduce the coefficients of the polynomial by `MODULUS``
     pub fn reduce_by_modulo<const MODULUS: u64>(
         &self,
         ctx: &mut Context<F>,
@@ -120,7 +120,7 @@ where
         [(); DEG + 1]: Sized,
     {
         let mut output = vec![];
-        // Enforce that self.assigned_coefficients[i][i] % MODULUS = output[i]
+        // Enforce that self.assigned_coefficients[i] % MODULUS = output[i]
         // Note that `div_mod` requires the value to be reduced to be at most `num_bits`
         let num_bits = self.max_num_bits;
         for i in 0..=DEG {
@@ -140,7 +140,6 @@ where
     }
 
     /// Enforce that polynomial has coefficients in the range [0, Z] or [Y-Z, Y-1]
-    ///
     ///
     /// # Assumptions
     /// * Z < Y
