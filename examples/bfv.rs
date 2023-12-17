@@ -313,32 +313,29 @@ fn bfv_encryption_circuit<F: Field>(
 
             // // pk0_u_trimmed is a polynomial in the R_q ring!
 
-            // // 1.5 m * delta
+            // 1.5 m * delta
 
-            // // Perform the polynomial scalar multiplication between m and delta.
-            // // The assumption of the `poly_scalar_mul` chip is that the coefficients of the input polynomials are constrained such to avoid overflow during the polynomial scalar multiplication
-            // // m has coefficients in the [0, T/2] OR [Q - T/2, Q - 1] range according to the constraint set above
-            // // delta is a constant equal to Q/T rounded to the lower integer from BFV paper
-            // // The coefficients of m_delta are in the [0, (Q-1) * (Q/T)] range. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Scalar Multiplication section
-            // // Q and T must be chosen such that (Q-1) * (Q/T) < p, where p is the modulus of the circuit field.
+            // Perform the polynomial scalar multiplication between m and delta (constant)
+            // The assumption of the `scalar_mul` chip is that the coefficients of the input polynomial and the constant are constrained such to avoid overflow during the polynomial scalar multiplication
+            // m has coefficients in the [0, T/2] OR [Q - T/2, Q - 1] range according to the constraint set above
+            // delta is a constant equal to Q/T rounded to the lower integer from BFV paper
+            // The coefficients of m_delta are in the [0, (Q-1) * (Q/T)] range. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Scalar Multiplication section
+            // Q and T must be chosen such that (Q-1) * (Q/T) < p, where p is the modulus of the circuit field.
+            let m_delta = m.scalar_mul(ctx_gate, &delta, range.gate());
 
-            // let m_delta = poly_scalar_mul::<{ N - 1 }, F>(ctx_gate, &m, &delta, range.gate());
+            // m_delta is a polynomial of degree N - 1
 
-            // // m_delta is a polynomial of degree N - 1
+            // 1.6 pk0_u_trimmed + m_delta
 
-            // // 1.6 pk0_u_trimmed + m_delta
+            // Perform the polynomial addition between pk0_u_trimmed and m_delta.
+            // The assumption of the `poly_add` chip is that the coefficients of the input polynomials are constrained such to avoid overflow during the polynomial addition
+            // `m_delta` has coefficients in the [0, (Q-1) * (Q/T)] range according to the constraint set above
+            // `pk0_u_trimmed` has coefficients in the [0, Q-1] range according to the constraint set above
+            // The coefficients of pk0_u_trimmed_plus_m_delta are in the [0, (Q-1) * (Q-T) + (Q-1)] range. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Addition section
+            // Q and T must be chosen such that (Q-1) * (Q-T) + (Q-1) < p, where p is the modulus of the circuit field.
 
-            // // Perform the polynomial addition between pk0_u_trimmed and m_delta.
-            // // The assumption of the `poly_add` chip is that the coefficients of the input polynomials are constrained such to avoid overflow during the polynomial addition
-            // // `m_delta` has coefficients in the [0, (Q-1) * (Q/T)] range according to the constraint set above
-            // // `pk0_u_trimmed` has coefficients in the [0, Q-1] range according to the constraint set above
-            // // The coefficients of pk0_u_trimmed_plus_m_delta are in the [0, (Q-1) * (Q-T) + (Q-1)] range. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Addition section
-            // // Q and T must be chosen such that (Q-1) * (Q-T) + (Q-1) < p, where p is the modulus of the circuit field.
-            // let pk0_u_trimmed_plus_m_delta =
-            //     poly_add::<{ N - 1 }, F>(ctx_gate, &pk0_u_trimmed, &m_delta, range.gate());
-
-            // // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `N` => x^N + 1
-            // // pk0_u_trimmed_plus_m_delta is a polynomial in the R_q ring
+            // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `N` => x^N + 1
+            // pk0_u_trimmed_plus_m_delta is a polynomial in the R_q ring
 
             // // 1.7 c0 = pk0_u_trimmed_plus_m_delta + e0
 

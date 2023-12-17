@@ -110,6 +110,26 @@ where
         );
     }
 
+    /// Multiply polynomial by a scalar
+    ///
+    /// # Assumptions
+    /// * the coefficients are constrained such to avoid overflow during the polynomial scalar multiplication
+    pub fn scalar_mul(
+        &self,
+        ctx: &mut Context<F>,
+        scalar: &AssignedValue<F>,
+        gate: &GateChip<F>,
+    ) -> Vec<AssignedValue<F>> {
+        let mut c = vec![];
+
+        for item in self.assigned_coefficients.iter().take(DEG + 1) {
+            let val = gate.mul(ctx, *item, *scalar);
+            c.push(val);
+        }
+
+        c
+    }
+
     /// Reduce the coefficients of the polynomial by `MODULUS``
     pub fn reduce_by_modulo<const MODULUS: u64>(
         &self,
