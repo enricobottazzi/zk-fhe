@@ -130,28 +130,29 @@ where
         c
     }
 
-    /// Reduce the coefficients of the polynomial by `MODULUS``
-    pub fn reduce_by_modulo<const MODULUS: u64>(
+    /// Reduce the coefficients of the polynomial by `modulus``
+    pub fn reduce_by_modulo(
         &self,
         ctx: &mut Context<F>,
         range: &RangeChip<F>,
+        modulus: u64,
     ) -> PolyChip<DEG, F>
     where
         [(); DEG + 1]: Sized,
     {
         let mut output = vec![];
-        // Enforce that self.assigned_coefficients[i] % MODULUS = output[i]
+        // Enforce that self.assigned_coefficients[i] % modulus = output[i]
         // Note that `div_mod` requires the value to be reduced to be at most `num_bits`
         let num_bits = self.max_num_bits;
         for i in 0..=DEG {
             let reduced_coeff = range
-                .div_mod(ctx, self.assigned_coefficients[i], MODULUS, num_bits)
+                .div_mod(ctx, self.assigned_coefficients[i], modulus, num_bits)
                 .1;
             output.push(reduced_coeff);
         }
 
-        // `max_num_bits` of the output polynomial is equal to the number of bits of `MODULUS` after the reduction
-        let max_num_bits = BigInt::from(MODULUS).bits() as usize;
+        // `max_num_bits` of the output polynomial is equal to the number of bits of `modulus` after the reduction
+        let max_num_bits = BigInt::from(modulus).bits() as usize;
 
         PolyChip {
             assigned_coefficients: output.try_into().unwrap(),
@@ -159,62 +160,63 @@ where
         }
     }
 
-    /// Enforce that polynomial has coefficients in the range [0, Z] or [Y-Z, Y-1]
+    /// Enforce that polynomial has coefficients in the range [0, z] or [y-z, y-1]
     ///
     /// # Assumptions
-    /// * Z < Y
-    pub fn check_poly_coefficients_in_range<const Y: u64, const Z: u64>(
+    /// * z < y
+    pub fn check_poly_coefficients_in_range(
         &self,
         ctx: &mut Context<F>,
         range: &RangeChip<F>,
+        z: u64,
+        y: u64,
     ) {
-        // assert that Z < Y
-        assert!(Z < Y);
+        // assert that z < y
+        assert!(z < y);
 
-        // The goal is to check that coeff is in the range [0, Z] OR [Y-Z, Y-1]
+        // The goal is to check that coeff is in the range [0, z] OR [y-z, y-1]
         // We split this check into two checks:
-        // - Check that coeff is in the range [0, Z] and store the boolean result in in_partial_range_1_vec
-        // - Check that coeff is in the range [Y-Z, Y-1] and store the boolean result in in_partial_range_2_vec
-        // We then perform (`in_partial_range_1` OR `in_partial_range_2`) to check that coeff is in the range [0, Z] OR [Y-Z, Y-1]
+        // - Check that coeff is in the range [0, z] and store the boolean result in in_partial_range_1_vec
+        // - Check that coeff is in the range [y-z, y-1] and store the boolean result in in_partial_range_2_vec
+        // We then perform (`in_partial_range_1` OR `in_partial_range_2`) to check that coeff is in the range [0, z] OR [y-z, y-1]
         // The result of this check is stored in the `in_range` vector.
         // All the boolean values in `in_range` are then enforced to be true
         let mut in_range_vec = Vec::with_capacity(DEG + 1);
 
-        // get the number of bits needed to represent the value of Y
-        let binary_representation = format!("{:b}", Y);
-        let q_bits = binary_representation.len();
+        // get the number of bits needed to represent the value of y
+        let y_bits = BigInt::from(y).bits();
 
         for coeff in self.assigned_coefficients.iter() {
-            // First of all, enforce that coefficient is in the [0, 2^q_bits] range
-            let bool = range.is_less_than_safe(ctx, *coeff, (1 << q_bits as u64) + 1);
+            // First of all, enforce that coefficient is in the [0, 2^y_bits] range
+            let bool = range.is_less_than_safe(ctx, *coeff, (1 << y_bits as u64) + 1);
             range.gate().assert_is_const(ctx, &bool, &F::from(1));
 
-            // Check for the range [0, Z]
-            // coeff is known are known to have <= `q_bits` bits according to the constraint set above
-            // Z + 1 is known to have <= `q_bits` bits according to assumption of the chip
+            // Check for the range [0, z]
+            // coeff is known are known to have <= `y_bits` bits according to the constraint set above
+            // z + 1 is known to have <= `y_bits` bits according to assumption of the function
             // Therefore it satisfies the assumption of `is_less_than` chip
             let in_partial_range_1 =
-                range.is_less_than(ctx, *coeff, Constant(F::from(Z + 1)), q_bits);
+                range.is_less_than(ctx, *coeff, Constant(F::from(z + 1)), y_bits as usize);
 
-            // Check for the range [Y-Z, Y-1]
-            // coeff is known are known to have <= `q_bits` bits according to the constraint set above
-            // Y - Z is known to have <= `q_bits` bits according to assumption of the chip
+            // Check for the range [y-z, y-1]
+            // coeff is known are known to have <= `y_bits` bits according to the constraint set above
+            // y - z is known to have <= `y_bits` bits according to assumption of the function
             // Therefore it satisfies the assumption of `is_less_than` chip
             let not_in_range_lower_bound =
-                range.is_less_than(ctx, *coeff, Constant(F::from(Y - Z)), q_bits);
+                range.is_less_than(ctx, *coeff, Constant(F::from(y - z)), y_bits as usize);
             let in_range_lower_bound = range.gate.not(ctx, not_in_range_lower_bound);
 
-            // coeff is known are known to have <= `q_bits` bits according to the constraint set above
-            // Y is known to have <= `q_bits` by definition
+            // coeff is known are known to have <= `y_bits` bits according to the constraint set above
+            // y is known to have <= `y_bits` by definition
             // Therefore it satisfies the assumption of `is_less_than` chip
             let in_range_upper_bound =
-                range.is_less_than(ctx, *coeff, Constant(F::from(Y)), q_bits);
+                range.is_less_than(ctx, *coeff, Constant(F::from(y)), y_bits as usize);
             let in_partial_range_2 =
                 range
                     .gate
                     .and(ctx, in_range_lower_bound, in_range_upper_bound);
 
-            // Combined check for [0, Z] OR [Y-Z, Y-1]
+            // Combined check for [0, z] OR [y-z, y-1]
             let in_range = range.gate.or(ctx, in_partial_range_1, in_partial_range_2);
             in_range_vec.push(in_range);
         }
@@ -226,15 +228,16 @@ where
         }
     }
 
-    /// Enforce that polynomial is sampled from the distribution chi key. Namely, that the coefficients are in the range [0, 1, Z-1].
-    pub fn check_poly_from_distribution_chi_key<const Z: u64>(
+    /// Enforce that polynomial is sampled from the distribution chi key. Namely, that the coefficients are in the range [0, 1, Z].
+    pub fn check_poly_from_distribution_chi_key(
         &self,
         ctx: &mut Context<F>,
         gate: &GateChip<F>,
+        z: u64,
     ) {
-        // In order to check that coeff is equal to either 0, 1 or Z-1
+        // In order to check that coeff is equal to either 0, 1 or z
         // The constraint that we want to enforce is:
-        // (coeff - 0) * (coeff - 1) * (coeff - (Z-1)) = 0
+        // (coeff - 0) * (coeff - 1) * (coeff - (z)) = 0
 
         // loop over all the coefficients of the polynomial
         for coeff in self.assigned_coefficients.iter() {
@@ -244,16 +247,16 @@ where
             // constrain (a - 1)
             let factor_2 = gate.sub(ctx, *coeff, Constant(F::from(1)));
 
-            // constrain (a - (Z-1))
-            let factor_3 = gate.sub(ctx, *coeff, Constant(F::from(Z - 1)));
+            // constrain (a - z)
+            let factor_3 = gate.sub(ctx, *coeff, Constant(F::from(z)));
 
             // constrain (a - 0) * (a - 1)
             let factor_1_2 = gate.mul(ctx, factor_1, factor_2);
 
-            // constrain (a - 0) * (a - 1) * (a - (Z-1))
+            // constrain (a - 0) * (a - 1) * (a - z)
             let factor_1_2_3 = gate.mul(ctx, factor_1_2, factor_3);
 
-            // constrain (a - 0) * (a - 1) * (a - (Z-1)) = 0
+            // constrain (a - 0) * (a - 1) * (a - z) = 0
             let bool = gate.is_zero(ctx, factor_1_2_3);
             gate.assert_is_const(ctx, &bool, &F::from(1));
         }

@@ -62,7 +62,7 @@ const B: u64 = 19;
 // const B: u64 = 19;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CircuitInput<const N: usize, const Q: u64, const T: u64, const B: u64> {
+pub struct CircuitInput<const N: usize> {
     pub pk0: Vec<String>, // PUBLIC INPUT. Should live in R_q according to assumption
     pub pk1: Vec<String>, // PUBLIC INPUT. Should live in R_q according to assumption
     pub m: Vec<String>,   // PRIVATE INPUT. Should in R_t (enforced inside the circuit)
@@ -78,7 +78,7 @@ fn bfv_encryption_circuit<F: Field>(
     ctx: &mut Context<F>,
     _eth_chip: &EthChip<F>,
     _keccak: &mut KeccakChip<F>,
-    input: CircuitInput<N, Q, T, B>,
+    input: CircuitInput<N>,
     make_public: &mut Vec<AssignedValue<F>>,
 ) -> impl FnOnce(&mut Context<F>, &mut Context<F>, &EthChip<F>) + Clone {
     // Transform the input polynomials strings into Polys
@@ -205,8 +205,8 @@ fn bfv_encryption_circuit<F: Field>(
             /* constraint on e1
                 Same as e0
             */
-            e0.check_poly_coefficients_in_range::<Q, B>(ctx_gate, range);
-            e1.check_poly_coefficients_in_range::<Q, B>(ctx_gate, range);
+            e0.check_poly_coefficients_in_range(ctx_gate, range, B, Q);
+            e1.check_poly_coefficients_in_range(ctx_gate, range, B, Q);
 
             /* constraint on u
                 - u must be a polynomial in the R_q ring => Coefficients must be in the [0, Q-1] range and the degree of u must be N - 1
@@ -217,7 +217,7 @@ fn bfv_encryption_circuit<F: Field>(
                 - As this range is a subset of the [0, Q-1] range, the coefficients of u are guaranteed to be in the [0, Q-1] range
                 - The assignment for loop above guarantees that the degree of u is N - 1
             */
-            u.check_poly_from_distribution_chi_key::<Q>(ctx_gate, range.gate());
+            u.check_poly_from_distribution_chi_key(ctx_gate, range.gate(), Q - 1);
 
             /* constraint on m
                 - m must be a polynomial in the R_t ring => Coefficients must be in the [0, T/2] OR [Q - T/2, Q - 1] range and the degree of m must be N - 1
@@ -226,7 +226,7 @@ fn bfv_encryption_circuit<F: Field>(
                 - Perform a range check on the coefficients of m to be in the [0, T/2] OR [Q - T/2, Q - 1] range
                 - The assignment for loop above guarantees that the degree of m is N - 1
             */
-            m.check_poly_coefficients_in_range::<Q, { T / 2 }>(ctx_gate, range);
+            m.check_poly_coefficients_in_range(ctx_gate, range, T / 2, Q);
 
             // // 1. COMPUTE C0 (c0 is the first ciphertext component)
 
@@ -239,7 +239,7 @@ fn bfv_encryption_circuit<F: Field>(
             // pk0_u has coefficients in the [0, (Q-1) * (Q-1) * (N+1)] range. This is the maximum value that a coefficient of pk0_u can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Multiplication section
 
             // 1.2 Reduce the coefficients of pk0_u by modulo `Q`
-            let pk0_u = pk0_u.reduce_by_modulo::<{ Q }>(ctx_gate, range);
+            let pk0_u = pk0_u.reduce_by_modulo(ctx_gate, range, Q);
 
             // pk0_u is a polynomial of degree (N - 1) * 2 = 2 * N - 2
             // pk0_u now has coefficients in the [0, Q-1] after reduction by modulo Q
@@ -379,7 +379,7 @@ fn bfv_encryption_circuit<F: Field>(
             // pk1_u has coefficients in the [0, (Q-1) * (Q-1) * (N+1)] range. This is the maximum value that a coefficient of pk0_u can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Multiplication section
 
             // 2.2 Reduce the coefficients of pk1_u by modulo `Q`
-            let pk1_u = pk1_u.reduce_by_modulo::<{ Q }>(ctx_gate, range);
+            let pk1_u = pk1_u.reduce_by_modulo(ctx_gate, range, Q);
 
             // pk1_u is a polynomial of degree (N - 1) * 2 = 2 * N - 2
             // pk1_u now has coefficients in the [0, Q-1] after reduction by modulo Q
