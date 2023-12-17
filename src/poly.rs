@@ -2,7 +2,7 @@ use num_bigint::BigInt;
 use num_integer::Integer;
 use num_traits::Zero;
 
-/// Struct to perform polynomial operations.
+/// Struct to perform polynomial operations (outside of the circuit).
 #[derive(Clone, Debug)]
 pub struct Poly {
     pub coefficients: Vec<BigInt>,

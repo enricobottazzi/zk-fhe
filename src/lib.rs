@@ -1,3 +1,3 @@
 #![feature(generic_const_exprs)]
-pub mod chips;
 pub mod poly;
+pub mod poly_chip;

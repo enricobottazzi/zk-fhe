@@ -5,11 +5,8 @@ use halo2_base::safe_types::RangeInstructions;
 use halo2_base::{AssignedValue, Context};
 use halo2_scaffold::scaffold::{cmd::Cli, run_eth};
 use serde::{Deserialize, Serialize};
-use zk_fhe::chips::poly_assigned::PolyAssigned;
-use zk_fhe::chips::poly_distribution::{
-    check_poly_coefficients_in_range, check_poly_from_distribution_chi_key, reduce_by_modulo_q,
-};
 use zk_fhe::poly::Poly;
+use zk_fhe::poly_chip::PolyChip;
 
 /// Circuit inputs for BFV encryption operations
 ///
@@ -104,15 +101,15 @@ fn bfv_encryption_circuit<F: Field>(
     // must be assigned in phase 0 so their values can be part of the Phase 0 commtiment and contribute to the challenge (gamma) used in Phase 1.
 
     // // Phase 0: Assign the input polynomials to the circuit witness table
-    let pk0 = PolyAssigned::<{ N - 1 }, F>::new(pk0_unassigned.clone(), ctx);
-    let pk1 = PolyAssigned::<{ N - 1 }, F>::new(pk1_unassigned.clone(), ctx);
-    let m = PolyAssigned::<{ N - 1 }, F>::new(m_unassigned, ctx);
-    let u = PolyAssigned::<{ N - 1 }, F>::new(u_unassigned.clone(), ctx);
-    let e0 = PolyAssigned::<{ N - 1 }, F>::new(e0_unassigned, ctx);
-    let e1 = PolyAssigned::<{ N - 1 }, F>::new(e1_unassigned, ctx);
-    let c0 = PolyAssigned::<{ N - 1 }, F>::new(c0_unassigned, ctx);
-    let c1 = PolyAssigned::<{ N - 1 }, F>::new(c1_unassigned, ctx);
-    let cyclo = PolyAssigned::<{ N }, F>::new(cyclo_unassigned.clone(), ctx);
+    let pk0 = PolyChip::<{ N - 1 }, F>::new(pk0_unassigned.clone(), ctx);
+    let pk1 = PolyChip::<{ N - 1 }, F>::new(pk1_unassigned.clone(), ctx);
+    let m = PolyChip::<{ N - 1 }, F>::new(m_unassigned, ctx);
+    let u = PolyChip::<{ N - 1 }, F>::new(u_unassigned.clone(), ctx);
+    let e0 = PolyChip::<{ N - 1 }, F>::new(e0_unassigned, ctx);
+    let e1 = PolyChip::<{ N - 1 }, F>::new(e1_unassigned, ctx);
+    let c0 = PolyChip::<{ N - 1 }, F>::new(c0_unassigned, ctx);
+    let c1 = PolyChip::<{ N - 1 }, F>::new(c1_unassigned, ctx);
+    let cyclo = PolyChip::<{ N }, F>::new(cyclo_unassigned.clone(), ctx);
 
     // DELTA is equal to Q/T rounded to the lower integer from BFV paper
     const DELTA: u64 = Q / T;
@@ -140,8 +137,8 @@ fn bfv_encryption_circuit<F: Field>(
     let mut pk1_u_unassigned = pk1_unassigned.mul(&u_unassigned);
 
     // assign pk0_u_unassigned and pk1_u_unassigned to the circuit
-    let pk0_u = PolyAssigned::<{ 2 * N - 2 }, F>::new(pk0_u_unassigned.clone(), ctx);
-    let pk1_u = PolyAssigned::<{ 2 * N - 2 }, F>::new(pk1_u_unassigned.clone(), ctx);
+    let pk0_u = PolyChip::<{ 2 * N - 2 }, F>::new(pk0_u_unassigned.clone(), ctx);
+    let pk1_u = PolyChip::<{ 2 * N - 2 }, F>::new(pk1_u_unassigned.clone(), ctx);
 
     // Reduce pk0_u_unassigned and pk1_u_unassigned by modulo Q
     pk0_u_unassigned.reduce_by_modulus(Q);
@@ -173,18 +170,18 @@ fn bfv_encryption_circuit<F: Field>(
     // Note: we are still in Phase 0 of the witness generation
 
     // Assign quotient_0 and quotient_1 to the circuit
-    let quotient_0 = PolyAssigned::<{ N - 2 }, F>::new(quotient_0_unassigned, ctx);
-    let quotient_1 = PolyAssigned::<{ N - 2 }, F>::new(quotient_1_unassigned, ctx);
+    let quotient_0 = PolyChip::<{ N - 2 }, F>::new(quotient_0_unassigned, ctx);
+    let quotient_1 = PolyChip::<{ N - 2 }, F>::new(quotient_1_unassigned, ctx);
 
     // // Assign quotient_0_times_cyclo_unassigned and quotient_1_times_cyclo_unassigned to the circuit
     let quotient_0_times_cyclo =
-        PolyAssigned::<{ 2 * N - 2 }, F>::new(quotient_0_times_cyclo_unassigned, ctx);
+        PolyChip::<{ 2 * N - 2 }, F>::new(quotient_0_times_cyclo_unassigned, ctx);
     let quotient_1_times_cyclo =
-        PolyAssigned::<{ 2 * N - 2 }, F>::new(quotient_1_times_cyclo_unassigned, ctx);
+        PolyChip::<{ 2 * N - 2 }, F>::new(quotient_1_times_cyclo_unassigned, ctx);
 
     // Assign the remainder_0 and remainder_1 to the circuit
-    let remainder_0 = PolyAssigned::<{ 2 * N - 2 }, F>::new(remainder_0_unassigned, ctx);
-    let remainder_1 = PolyAssigned::<{ 2 * N - 2 }, F>::new(remainder_1_unassigned, ctx);
+    let remainder_0 = PolyChip::<{ 2 * N - 2 }, F>::new(remainder_0_unassigned, ctx);
+    let remainder_1 = PolyChip::<{ 2 * N - 2 }, F>::new(remainder_1_unassigned, ctx);
 
     // // Phase 0 is over, we can now move to Phase 1, in which we will leverage the random challenge generated during Phase 0.
     // // According to the design of this API, all the constraints must be written inside a callback function.
@@ -196,40 +193,40 @@ fn bfv_encryption_circuit<F: Field>(
             let rlc = eth_chip.rlc();
 
             /* constraint on e0
-                - e0 must be a polynomial in the R_q ring => Coefficients must be in the [0, Q-1] range and the degree of e0 must be DEG - 1
+                - e0 must be a polynomial in the R_q ring => Coefficients must be in the [0, Q-1] range and the degree of e0 must be N - 1
                 - e0 must be sampled from the distribution ChiError, namely the coefficients of e0 must be in the [0, b] OR [q-b, q-1] range
 
                 Approach:
                 - `check_poly_from_distribution_chi_error` chip guarantees that the coefficients of e0 are in the range [0, b] OR [q-b, q-1]
                 - As this range is a subset of the [0, Q-1] range, the coefficients of e0 are guaranteed to be in the [0, Q-1] range
-                - The assignment for loop above enforces that the degree of e0 is DEG - 1
+                - The assignment for loop above enforces that the degree of e0 is N - 1
             */
 
             /* constraint on e1
                 Same as e0
             */
-            check_poly_coefficients_in_range::<{ N - 1 }, Q, B, F>(ctx_gate, &e0, range);
-            check_poly_coefficients_in_range::<{ N - 1 }, Q, B, F>(ctx_gate, &e1, range);
+            e0.check_poly_coefficients_in_range::<Q, B>(ctx_gate, range);
+            e1.check_poly_coefficients_in_range::<Q, B>(ctx_gate, range);
 
             /* constraint on u
-                - u must be a polynomial in the R_q ring => Coefficients must be in the [0, Q-1] range and the degree of u must be DEG - 1
+                - u must be a polynomial in the R_q ring => Coefficients must be in the [0, Q-1] range and the degree of u must be N - 1
                 - u must be sampled from the distribution ChiKey, namely the coefficients of u must be either 0, 1 or Q-1
 
                 Approach:
                 - `check_poly_from_distribution_chi_key` chip guarantees that the coefficients of u are either 0, 1 or Q-1
                 - As this range is a subset of the [0, Q-1] range, the coefficients of u are guaranteed to be in the [0, Q-1] range
-                - The assignment for loop above guarantees that the degree of u is DEG - 1
+                - The assignment for loop above guarantees that the degree of u is N - 1
             */
-            check_poly_from_distribution_chi_key::<{ N - 1 }, Q, F>(ctx_gate, &u, range.gate());
+            u.check_poly_from_distribution_chi_key::<Q>(ctx_gate, range.gate());
 
             /* constraint on m
-                - m must be a polynomial in the R_t ring => Coefficients must be in the [0, T/2] OR [Q - T/2, Q - 1] range and the degree of m must be DEG - 1
+                - m must be a polynomial in the R_t ring => Coefficients must be in the [0, T/2] OR [Q - T/2, Q - 1] range and the degree of m must be N - 1
 
                 Approach:
                 - Perform a range check on the coefficients of m to be in the [0, T/2] OR [Q - T/2, Q - 1] range
-                - The assignment for loop above guarantees that the degree of m is DEG - 1
+                - The assignment for loop above guarantees that the degree of m is N - 1
             */
-            check_poly_coefficients_in_range::<{ N - 1 }, Q, { T / 2 }, F>(ctx_gate, &m, range);
+            m.check_poly_coefficients_in_range::<Q, { T / 2 }>(ctx_gate, range);
 
             // // 1. COMPUTE C0 (c0 is the first ciphertext component)
 
@@ -238,23 +235,23 @@ fn bfv_encryption_circuit<F: Field>(
 
             pk0.constrain_poly_mul(u, pk0_u.clone(), ctx_gate, ctx_rlc, rlc);
 
-            // pk0_u is a polynomial of degree (DEG - 1) * 2 = 2*DEG - 2
-            // pk0_u has coefficients in the [0, (Q-1) * (Q-1) * (DEG+1)] range. This is the maximum value that a coefficient of pk0_u can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Multiplication section
+            // pk0_u is a polynomial of degree (N - 1) * 2 = 2*N - 2
+            // pk0_u has coefficients in the [0, (Q-1) * (Q-1) * (N+1)] range. This is the maximum value that a coefficient of pk0_u can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Multiplication section
 
             // 1.2 Reduce the coefficients of pk0_u by modulo `Q`
-            let pk0_u = reduce_by_modulo_q::<{ 2 * N - 2 }, Q, F>(ctx_gate, range, &pk0_u);
+            let pk0_u = pk0_u.reduce_by_modulo_q::<{ Q }>(ctx_gate, range);
 
-            // pk0_u is a polynomial of degree (DEG - 1) * 2 = 2 * DEG - 2
+            // pk0_u is a polynomial of degree (N - 1) * 2 = 2 * N - 2
             // pk0_u now has coefficients in the [0, Q-1] after reduction by modulo Q
-            // cyclo is a polynomial of degree DEG
+            // cyclo is a polynomial of degree N
 
             // // 1.3 Reduce pk0_u by the cyclo polynomial
 
-            // for i in 0..DEG - 1 {
+            // for i in 0..N - 1 {
             //     range.check_less_than_safe(ctx_gate, quotient_0_with_length.get_poly()[i], Q);
             // }
 
-            // for i in 0..2 * DEG - 1 {
+            // for i in 0..2 * N - 1 {
             //     range.check_less_than_safe(ctx_gate, remainder_0_with_length.get_poly()[i], Q);
             // }
 
@@ -274,11 +271,11 @@ fn bfv_encryption_circuit<F: Field>(
             // // * Assumption: the coefficients of remainder are constrained to be in the range [0, Q - 1] -> met according to the constraint just set above
             // // * Assumption: the coefficients are constrained such to avoid overflow during the polynomial addition between `quotient_times_cyclo` and `remainder`
             // //      -> remainder has coefficients in the [0, Q - 1] range according to the constraint just set above
-            // //      -> quotient_times_cyclo has coefficients in the [0, (Q-1) * (Q-1) * (DEG+1)] range according to the above analysis
-            // //      -> (Q-1) * (Q-1) * (DEG+1) + (Q-1) is the maximum value that a quotient of remainder + quotient_times_cyclo can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Addition section
-            // //         Therefore Q and DEG must be chosen such that (Q-1) * (Q-1) * (DEG+1) + (Q-1) < p, where p is the modulus of the circuit field.
+            // //      -> quotient_times_cyclo has coefficients in the [0, (Q-1) * (Q-1) * (N+1)] range according to the above analysis
+            // //      -> (Q-1) * (Q-1) * (N+1) + (Q-1) is the maximum value that a quotient of remainder + quotient_times_cyclo can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Addition section
+            // //         Therefore Q and N must be chosen such that (Q-1) * (Q-1) * (N+1) + (Q-1) < p, where p is the modulus of the circuit field.
 
-            // constrain_poly_reduction_by_cyclo::<{ 2 * DEG - 2 }, DEG, Q, F>(
+            // constrain_poly_reduction_by_cyclo::<{ 2 * N - 2 }, N, Q, F>(
             //     &pk0_u,
             //     cyclo_with_length.clone(),
             //     quotient_0_with_length,
@@ -292,27 +289,27 @@ fn bfv_encryption_circuit<F: Field>(
 
             // let pk0_u = remainder_0_with_length.get_poly().clone();
 
-            // assert_eq!(pk0_u.len() - 1, 2 * DEG - 2);
+            // assert_eq!(pk0_u.len() - 1, 2 * N - 2);
 
-            // // pk0_u is a polynomial of degree 2*DEG - 2
+            // // pk0_u is a polynomial of degree 2*N - 2
             // // pk0_u now has coefficients in the [0, Q-1] range
 
-            // // But actually, the degree of pk0_u should be DEG - 1 after reduction by the cyclo polynomial, the first DEG - 1 coefficients are just zeroes
+            // // But actually, the degree of pk0_u should be N - 1 after reduction by the cyclo polynomial, the first N - 1 coefficients are just zeroes
 
-            // // 1.4 Enforce that the first DEG - 1 coefficients of pk0_u are zeroes
-            // for pk0_u_element in pk0_u.iter().take(DEG - 1) {
+            // // 1.4 Enforce that the first N - 1 coefficients of pk0_u are zeroes
+            // for pk0_u_element in pk0_u.iter().take(N - 1) {
             //     let bool = range
             //         .gate()
             //         .is_equal(ctx_gate, *pk0_u_element, Constant(F::from(0)));
             //     range.gate().assert_is_const(ctx_gate, &bool, &F::from(1));
             // }
 
-            // // Therefore, we can safely trim the first DEG - 1 coefficients from pk0_u
+            // // Therefore, we can safely trim the first N - 1 coefficients from pk0_u
 
-            // let pk0_u_trimmed: Vec<_> = pk0_u.iter().skip(DEG - 1).cloned().collect();
+            // let pk0_u_trimmed: Vec<_> = pk0_u.iter().skip(N - 1).cloned().collect();
 
-            // // assert that the degree of pk0_u_trimmed is DEG - 1
-            // assert_eq!(pk0_u_trimmed.len() - 1, DEG - 1);
+            // // assert that the degree of pk0_u_trimmed is N - 1
+            // assert_eq!(pk0_u_trimmed.len() - 1, N - 1);
 
             // // pk0_u_trimmed is a polynomial in the R_q ring!
 
@@ -325,9 +322,9 @@ fn bfv_encryption_circuit<F: Field>(
             // // The coefficients of m_delta are in the [0, (Q-1) * (Q/T)] range. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Scalar Multiplication section
             // // Q and T must be chosen such that (Q-1) * (Q/T) < p, where p is the modulus of the circuit field.
 
-            // let m_delta = poly_scalar_mul::<{ DEG - 1 }, F>(ctx_gate, &m, &delta, range.gate());
+            // let m_delta = poly_scalar_mul::<{ N - 1 }, F>(ctx_gate, &m, &delta, range.gate());
 
-            // // m_delta is a polynomial of degree DEG - 1
+            // // m_delta is a polynomial of degree N - 1
 
             // // 1.6 pk0_u_trimmed + m_delta
 
@@ -338,9 +335,9 @@ fn bfv_encryption_circuit<F: Field>(
             // // The coefficients of pk0_u_trimmed_plus_m_delta are in the [0, (Q-1) * (Q-T) + (Q-1)] range. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Addition section
             // // Q and T must be chosen such that (Q-1) * (Q-T) + (Q-1) < p, where p is the modulus of the circuit field.
             // let pk0_u_trimmed_plus_m_delta =
-            //     poly_add::<{ DEG - 1 }, F>(ctx_gate, &pk0_u_trimmed, &m_delta, range.gate());
+            //     poly_add::<{ N - 1 }, F>(ctx_gate, &pk0_u_trimmed, &m_delta, range.gate());
 
-            // // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
+            // // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `N` => x^N + 1
             // // pk0_u_trimmed_plus_m_delta is a polynomial in the R_q ring
 
             // // 1.7 c0 = pk0_u_trimmed_plus_m_delta + e0
@@ -352,7 +349,7 @@ fn bfv_encryption_circuit<F: Field>(
             // // The coefficients of computed_c0 are in the [0, (Q-1) * (Q-T) + (Q-1) + (Q-1)] range. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Addition section
             // // Q, T must be chosen such that (Q-1) * (Q-T) + (Q-1) + (Q-1) < p, where p is the modulus of the circuit field.
             // let computed_c0 =
-            //     poly_add::<{ DEG - 1 }, F>(ctx_gate, &pk0_u_trimmed_plus_m_delta, &e0, range.gate());
+            //     poly_add::<{ N - 1 }, F>(ctx_gate, &pk0_u_trimmed_plus_m_delta, &e0, range.gate());
 
             // // get the number of bits needed to represent the value of (Q-1) * (Q-T) + (Q-1) + (Q-1)
             // let q_minus_1 = BigInt::from(Q) - BigInt::from(1u32);
@@ -369,9 +366,9 @@ fn bfv_encryption_circuit<F: Field>(
             // // 1.8 Reduce the coefficients of `pk0_u_trimmed_plus_m_delta` by modulo `Q`
 
             // let computed_c0 =
-            //     poly_reduce_by_modulo_q::<{ DEG - 1 }, Q, F>(ctx_gate, &computed_c0, range, num_bits_3);
+            //     poly_reduce_by_modulo_q::<{ N - 1 }, Q, F>(ctx_gate, &computed_c0, range, num_bits_3);
 
-            // // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
+            // // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `N` => x^N + 1
             // // computed_c0 is a polynomial in the R_q ring!
 
             // // 2. COMPUTE C1 (c1 is the second ciphertext component)
@@ -388,33 +385,33 @@ fn bfv_encryption_circuit<F: Field>(
             //     rlc,
             // );
 
-            // // pk1_u is a polynomial of degree (DEG - 1) * 2 = 2*DEG - 2
-            // // pk1_u has coefficients in the [0, (Q-1) * (Q-1) * (DEG+1)] range. This is the maximum value that a coefficient of pk0_u can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Multiplication section
+            // // pk1_u is a polynomial of degree (N - 1) * 2 = 2*N - 2
+            // // pk1_u has coefficients in the [0, (Q-1) * (Q-1) * (N+1)] range. This is the maximum value that a coefficient of pk0_u can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Multiplication section
 
             // // 2.2 Reduce the coefficients by modulo `Q`
 
-            // // The coefficients of pk1_u are in the range [0, (Q-1) * (Q-1) * (DEG+1)] according to the above analysis.
+            // // The coefficients of pk1_u are in the range [0, (Q-1) * (Q-1) * (N+1)] according to the above analysis.
             // // Therefore the coefficients of pk1_u are known to have <= `num_bits_1` bits, therefore satisfying the assumption of the `poly_reduce_by_modulo_q` chip
 
             // let pk1_u =
-            //     poly_reduce_by_modulo_q::<{ 2 * DEG - 2 }, Q, F>(ctx_gate, &pk1_u, range, num_bits_1);
+            //     poly_reduce_by_modulo_q::<{ 2 * N - 2 }, Q, F>(ctx_gate, &pk1_u, range, num_bits_1);
 
-            // // pk0_u is a polynomial of degree (DEG - 1) * 2 = 2 * DEG - 2
+            // // pk0_u is a polynomial of degree (N - 1) * 2 = 2 * N - 2
             // // pk0_u now has coefficients in the [0, Q-1] range after reduction by modulo Q
-            // // cyclo is a polynomial of degree DEG
+            // // cyclo is a polynomial of degree N
 
             // // 2.3 Reduce pk1_u by the cyclo polynomial
 
-            // for i in 0..DEG - 1 {
+            // for i in 0..N - 1 {
             //     range.check_less_than_safe(ctx_gate, quotient_1_with_length.get_poly()[i], Q);
             // }
 
-            // for i in 0..2 * DEG - 1 {
+            // for i in 0..2 * N - 1 {
             //     range.check_less_than_safe(ctx_gate, remainder_1_with_length.get_poly()[i], Q);
             // }
 
             // // For the analysis of the assumptions of the `constrain_poly_reduction_by_cyclo` chip, see the comments above in the `1.3 Reduce pk0_u by the cyclo polynomial` section
-            // constrain_poly_reduction_by_cyclo::<{ 2 * DEG - 2 }, DEG, Q, F>(
+            // constrain_poly_reduction_by_cyclo::<{ 2 * N - 2 }, N, Q, F>(
             //     &pk1_u,
             //     cyclo_with_length.clone(),
             //     quotient_1_with_length,
@@ -428,27 +425,27 @@ fn bfv_encryption_circuit<F: Field>(
 
             // let pk1_u = remainder_1_with_length.get_poly().clone();
 
-            // // assert that the degree of pk1_u is 2*DEG - 2
+            // // assert that the degree of pk1_u is 2*N - 2
 
-            // // pk1_u is a polynomial of degree 2*DEG - 2
+            // // pk1_u is a polynomial of degree 2*N - 2
             // // pk1_u now has coefficients in the [0, Q-1] range
 
-            // // But actually, the degree of pk1_u should be DEG - 1 after reduction by the cyclo polynomial, the first DEG - 1 coefficients are just zeroes
+            // // But actually, the degree of pk1_u should be N - 1 after reduction by the cyclo polynomial, the first N - 1 coefficients are just zeroes
 
-            // // 2.4 Enforce that the first DEG - 1 coefficients of pk0_u are zeroes
-            // for pk1_u_element in pk1_u.iter().take(DEG - 1) {
+            // // 2.4 Enforce that the first N - 1 coefficients of pk0_u are zeroes
+            // for pk1_u_element in pk1_u.iter().take(N - 1) {
             //     let bool = range
             //         .gate()
             //         .is_equal(ctx_gate, *pk1_u_element, Constant(F::from(0)));
             //     range.gate().assert_is_const(ctx_gate, &bool, &F::from(1));
             // }
 
-            // // Therefore, we can safely trim the first DEG - 1 coefficients from pk1_u
+            // // Therefore, we can safely trim the first N - 1 coefficients from pk1_u
 
-            // let pk1_u_trimmed: Vec<_> = pk1_u.iter().skip(DEG - 1).cloned().collect();
+            // let pk1_u_trimmed: Vec<_> = pk1_u.iter().skip(N - 1).cloned().collect();
 
-            // // assert that the degree of pk1_u_trimmed is DEG - 1
-            // assert_eq!(pk1_u_trimmed.len() - 1, DEG - 1);
+            // // assert that the degree of pk1_u_trimmed is N - 1
+            // assert_eq!(pk1_u_trimmed.len() - 1, N - 1);
 
             // // pk1_u_trimmed is a polynomial in the R_q ring!
 
@@ -460,7 +457,7 @@ fn bfv_encryption_circuit<F: Field>(
             // // `e1` has coefficients in the [0, B] OR [Q-B, Q-1] range according to the constraint set above
             // // The coefficients of computed_c1 are in the [0, 2Q - 2] range. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Addition section
             // // Q must be chosen such that 2Q - 2 < p, where p is the modulus of the circuit field.
-            // let computed_c1 = poly_add::<{ DEG - 1 }, F>(ctx_gate, &pk1_u_trimmed, &e1, range.gate());
+            // let computed_c1 = poly_add::<{ N - 1 }, F>(ctx_gate, &pk1_u_trimmed, &e1, range.gate());
 
             // // get the number of bits needed to represent the value of 2Q - 2
             // // get the number of bits needed to represent the value of 2Q - 2
@@ -473,14 +470,14 @@ fn bfv_encryption_circuit<F: Field>(
             // // 2.6 Reduce the coefficients of `computed_c1` by modulo `Q`
 
             // let computed_c1 =
-            //     poly_reduce_by_modulo_q::<{ DEG - 1 }, Q, F>(ctx_gate, &computed_c1, range, num_bits_4);
+            //     poly_reduce_by_modulo_q::<{ N - 1 }, Q, F>(ctx_gate, &computed_c1, range, num_bits_4);
 
-            // // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `DEG` => x^DEG + 1
+            // // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `N` => x^N + 1
             // // computed_c1 is a polynomial in the R_q ring
 
             // // Enforce equality between `c0` and `computed_c0` using equality check
             // // Enfroce equality between `c1` and `computed_c1` using equality check
-            // for i in 0..DEG {
+            // for i in 0..N {
             //     let bool_0 = range.gate().is_equal(ctx_gate, c0[i], computed_c0[i]);
             //     range.gate().assert_is_const(ctx_gate, &bool_0, &F::from(1));
 
