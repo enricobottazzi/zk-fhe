@@ -59,31 +59,15 @@ pub fn constrain_poly_mul<F: Field>(
     ctx_gate: &mut Context<F>,
     ctx_rlc: &mut Context<F>,
     rlc: &RlcChip<F>,
-    gate: &GateChip<F>,
 ) {
     // `compute_rlc` evaluates the polynomial at gamma and returns the evaluation
-    let poly_a_trace = rlc.compute_rlc(
-        (ctx_gate, ctx_rlc),
-        gate,
-        a_assigned_with_length.assigned_poly,
-        a_assigned_with_length.assigned_length,
-    );
+    let poly_a_trace = rlc.compute_rlc_fixed_len(ctx_rlc, a_assigned_with_length.assigned_poly);
     let poly_a_eval_assigned = poly_a_trace.rlc_val;
 
-    let poly_b_trace = rlc.compute_rlc(
-        (ctx_gate, ctx_rlc),
-        gate,
-        b_assigned_with_length.assigned_poly,
-        b_assigned_with_length.assigned_length,
-    );
+    let poly_b_trace = rlc.compute_rlc_fixed_len(ctx_rlc, b_assigned_with_length.assigned_poly);
     let poly_b_eval_assigned = poly_b_trace.rlc_val;
 
-    let poly_c_trace = rlc.compute_rlc(
-        (ctx_gate, ctx_rlc),
-        gate,
-        c_assigned_with_length.assigned_poly,
-        c_assigned_with_length.assigned_length,
-    );
+    let poly_c_trace = rlc.compute_rlc_fixed_len(ctx_rlc, c_assigned_with_length.assigned_poly);
     let poly_c_eval_assigned = poly_c_trace.rlc_val;
 
     // enforce gate a(gamma) * b(gamma) - c(gamma) = 0
@@ -228,7 +212,6 @@ pub fn constrain_poly_reduction_by_cyclo<
         ctx_gate,
         ctx_rlc,
         rlc,
-        range.gate(),
     );
 
     // Perform the addition between quotient_times_cyclo and remainder

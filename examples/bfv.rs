@@ -374,7 +374,6 @@ fn bfv_encryption_circuit<F: Field>(
             ctx_gate,
             ctx_rlc,
             rlc,
-            range.gate(),
         );
 
         // pk0_u is a polynomial of degree (DEG - 1) * 2 = 2*DEG - 2
@@ -525,7 +524,6 @@ fn bfv_encryption_circuit<F: Field>(
             ctx_gate,
             ctx_rlc,
             rlc,
-            range.gate(),
         );
 
         // pk1_u is a polynomial of degree (DEG - 1) * 2 = 2*DEG - 2
