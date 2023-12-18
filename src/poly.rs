@@ -72,8 +72,8 @@ impl Poly {
 
     /// Perform polynomial division between self and other, where self is the dividend and other is the divisor.
     /// Returns the quotient and remainder.
-    /// The quotient is padded with zeroes at the beginning to make its degree equal to self.deg() - other.deg()
-    /// The remainder is padded with zeroes at the beginning to make its degree equal to 2 * other.deg() - 2
+    /// The quotient is padded with zeroes at the beginning to make its degree equal to other.deg()
+    /// The remainder is padded with zeroes at the beginning to make its degree equal to 2 * other.deg()
     pub fn div_euclid(&self, other: &Poly) -> (Self, Self) {
         if other.coefficients.is_empty() || other.coefficients.iter().all(BigInt::is_zero) {
             panic!("Cannot divide by a zero polynomial!");
@@ -118,13 +118,13 @@ impl Poly {
 
         // pad quotient with zeroes at the beginning to make its degree equal to self.deg() - other.deg()
         let mut quotient = quotient;
-        while quotient.len() - 1 < self.deg() - other.deg() {
+        while quotient.len() - 1 < other.deg() {
             quotient.insert(0, BigInt::from(0u32));
         }
 
         // pad remainder with zeroes at the beginning to make its degree equal to 2 * other.deg() - 2
         let mut remainder = remainder;
-        while remainder.len() - 1 < 2 * other.deg() - 2 {
+        while remainder.len() - 1 < 2 * other.deg() {
             remainder.insert(0, BigInt::from(0u32));
         }
 

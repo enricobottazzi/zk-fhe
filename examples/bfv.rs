@@ -29,7 +29,7 @@ use zk_fhe::poly_chip::PolyChip;
 /// * `c1`: Second ciphertext component - polynomial of degree N-1 living in ciphertext space R_q
 /// * `cyclo`: Cyclotomic polynomial of degree N in the form x^N + 1
 ///
-/// Note: all the polynomials are expressed by their coefficients in the form [a_N-1, a_N-2, ..., a_1, a_0] where a_0 is the constant term
+/// Note: all the polynomials are expressed by their coefficients in the form [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
 ///
 /// # Assumptions (to be checked on the public inputs outside the circuit)
 ///
@@ -40,7 +40,7 @@ use zk_fhe::poly_chip::PolyChip;
 /// * `cyclo` must be the cyclotomic polynomial of degree `N` in the form x^N + 1
 /// * `pk0` and `pk1` must be polynomials in the R_q ring. The ring R_q is defined as R_q = Z_q[x]/(x^N + 1)
 /// *  Q and N must be chosen such that (Q-1) * (Q-1) * (N+1) + (Q-1) < p, where p is the modulus of the circuit field to avoid overflow during polynomial addition inside the circuit
-/// *  Q, T must be chosen such that (Q-1) * (Q-T) + (Q-1) + (Q-1) < p, where p is the modulus of the circuit field.. This is required to avoid overflow during polynomial scalar multiplication inside the circuit
+/// *  Q and T must be chosen such that (Q-1) * (Q-T) + (Q-1) + (Q-1) < p, where p is the modulus of the circuit field.. This is required to avoid overflow during polynomial scalar multiplication inside the circuit
 /// *  Q must be chosen such that 2Q - 2 < p, where p is the modulus of the circuit field. This is required to avoid overflow during polynomial addition inside the circuit
 
 // For real world applications, the parameters should be chosen according to the security level required.
@@ -61,6 +61,10 @@ const B: u64 = 19;
 // const T: u64 = 7;
 // const B: u64 = 19;
 
+/// BFV Encryption circuit
+///
+/// # Generic Parameters
+/// * `N`: Degree of the cyclotomic polynomial `cyclo` of the polynomial ring. Set as generic parameter as it defines the structure of the circuit and should be known at key generation time
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CircuitInput<const N: usize> {
     pub pk0: Vec<String>, // PUBLIC INPUT. Should live in R_q according to assumption
@@ -81,7 +85,7 @@ fn bfv_encryption_circuit<F: Field>(
     input: CircuitInput<N>,
     make_public: &mut Vec<AssignedValue<F>>,
 ) -> impl FnOnce(&mut Context<F>, &mut Context<F>, &EthChip<F>) + Clone {
-    // Transform the input polynomials strings into Polys
+    // Transform the input polynomials strings into `Poly`
     let pk0_unassigned = Poly::from_string(input.pk0);
     let pk1_unassigned = Poly::from_string(input.pk1);
     let m_unassigned = Poly::from_string(input.m);
@@ -97,10 +101,10 @@ fn bfv_encryption_circuit<F: Field>(
     // Challenge API requires a Phase 0 of witness generation. During this phase, all the input polynomials are assigned to the circuit witness table.
     // A commitment from the witness generated during Phase 0 is extracted and then hashed to generate the random value according to Fiat-Shamir heuristic.
     // This random challenge can be then used as part of witness generation during Phase 1. We will need this to perform efficient polynomial multiplication.
-    // Note that if you wanna verify something with the challenge API (eg enforcing polynomial multiplcation), the stuffs you verify (namely the input polynomials)
+    // Note that if you wanna set a constraint using with the challenge API (eg enforcing polynomial multiplcation), the stuffs that are part of the constraint (namely the input polynomials)
     // must be assigned in phase 0 so their values can be part of the Phase 0 commtiment and contribute to the challenge (gamma) used in Phase 1.
 
-    // // Phase 0: Assign the input polynomials to the circuit witness table
+    // Phase 0: Assign the input polynomials to the circuit witness table
     let pk0 = PolyChip::<{ N - 1 }, F>::new(pk0_unassigned.clone(), ctx);
     let pk1 = PolyChip::<{ N - 1 }, F>::new(pk1_unassigned.clone(), ctx);
     let m = PolyChip::<{ N - 1 }, F>::new(m_unassigned, ctx);
@@ -170,18 +174,18 @@ fn bfv_encryption_circuit<F: Field>(
     // Note: we are still in Phase 0 of the witness generation
 
     // Assign quotient_0 and quotient_1 to the circuit
-    let quotient_0 = PolyChip::<{ N - 2 }, F>::new(quotient_0_unassigned, ctx);
-    let quotient_1 = PolyChip::<{ N - 2 }, F>::new(quotient_1_unassigned, ctx);
+    let quotient_0 = PolyChip::<{ N }, F>::new(quotient_0_unassigned, ctx);
+    let quotient_1 = PolyChip::<{ N }, F>::new(quotient_1_unassigned, ctx);
 
     // // Assign quotient_0_times_cyclo_unassigned and quotient_1_times_cyclo_unassigned to the circuit
     let quotient_0_times_cyclo =
-        PolyChip::<{ 2 * N - 2 }, F>::new(quotient_0_times_cyclo_unassigned, ctx);
+        PolyChip::<{ 2 * N }, F>::new(quotient_0_times_cyclo_unassigned, ctx);
     let quotient_1_times_cyclo =
-        PolyChip::<{ 2 * N - 2 }, F>::new(quotient_1_times_cyclo_unassigned, ctx);
+        PolyChip::<{ 2 * N }, F>::new(quotient_1_times_cyclo_unassigned, ctx);
 
     // Assign the remainder_0 and remainder_1 to the circuit
-    let remainder_0 = PolyChip::<{ 2 * N - 2 }, F>::new(remainder_0_unassigned, ctx);
-    let remainder_1 = PolyChip::<{ 2 * N - 2 }, F>::new(remainder_1_unassigned, ctx);
+    let remainder_0 = PolyChip::<{ 2 * N }, F>::new(remainder_0_unassigned, ctx);
+    let remainder_1 = PolyChip::<{ 2 * N }, F>::new(remainder_1_unassigned, ctx);
 
     // // Phase 0 is over, we can now move to Phase 1, in which we will leverage the random challenge generated during Phase 0.
     // // According to the design of this API, all the constraints must be written inside a callback function.
@@ -245,54 +249,43 @@ fn bfv_encryption_circuit<F: Field>(
             // pk0_u now has coefficients in the [0, Q-1] after reduction by modulo Q
             // cyclo is a polynomial of degree N
 
-            // // 1.3 Reduce pk0_u by the cyclo polynomial
+            // 1.3 Reduce pk0_u by the cyclo polynomial
+            // This is equal to constrain pk0_u = quotient_0 * cyclo + remainder_0
 
-            // for i in 0..N - 1 {
-            //     range.check_less_than_safe(ctx_gate, quotient_0_with_length.get_poly()[i], Q);
-            // }
+            // constrain the coefficients of quotient_0 and remainder_0 to be in the [0, Q-1] range
+            quotient_0.check_coefficients_in_modulus_field(ctx_gate, range, Q);
+            remainder_0.check_coefficients_in_modulus_field(ctx_gate, range, Q);
 
-            // for i in 0..2 * N - 1 {
-            //     range.check_less_than_safe(ctx_gate, remainder_0_with_length.get_poly()[i], Q);
-            // }
+            // constrain the polynomial multiplication between quotient_0 and cyclo to be equal to quotient_0_times_cyclo using the `constrain_poly_mul` chip
+            quotient_0.constrain_poly_mul(
+                cyclo,
+                quotient_0_times_cyclo.clone(),
+                ctx_gate,
+                ctx_rlc,
+                rlc,
+            );
 
-            // // Assert that all the coefficients of quotient_0_times_cyclo and quotient_1_times_cyclo are in the [0, p - 1] range.
-            // // If that is not the case, the value assigned to the circuit witness will be equal to the value modulo p, which is not what we want. This will eventually fail the `constrain_poly_mul` constraint.
-            // let p = BigInt::from_str_radix(&F::MODULUS[2..], 16).unwrap();
-            // for coeff in quotient_0_times_cyclo.iter() {
-            //     assert!(coeff < &p);
-            // }
+            // quotient_0_times_cyclo is a polynomial of degree 2*N
+            // quotient_0_times_cyclo has coefficients in the [0, (Q-1) * (Q-1) * (N+1)] range. This is the maximum value that a coefficient of quotient_0_times_cyclo can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Multiplication section
 
-            // for coeff in quotient_1_times_cyclo.iter() {
-            //     assert!(coeff < &p);
-            // }
+            // compute the addition between quotient_0_times_cyclo and remainder_0
+            // The assumption of the `poly_add` chip is that the coefficients of the input polynomials are constrained such to avoid overflow during the polynomial addition
+            //      -> remainder has coefficients in the [0, Q - 1] range according to the constraint just set above
+            //      -> quotient_times_cyclo has coefficients in the [0, (Q-1) * (Q-1) * (N+1)]
+            //      -> (Q-1) * (Q-1) * (N+1) + (Q-1) is the maximum value that a quotient of remainder + quotient_times_cyclo can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Addition section
+            //         Therefore Q and N must be chosen such that (Q-1) * (Q-1) * (N+1) + (Q-1) < p, where p is the modulus of the circuit field.
 
-            // // The assumption of the `constrain_poly_reduction_by_cyclo` chip are that:
-            // // * Assumption: the coefficients of quotient are constrained to be in the range [0, Q - 1] -> met according to the constraint just set above
-            // // * Assumption: the coefficients of remainder are constrained to be in the range [0, Q - 1] -> met according to the constraint just set above
-            // // * Assumption: the coefficients are constrained such to avoid overflow during the polynomial addition between `quotient_times_cyclo` and `remainder`
-            // //      -> remainder has coefficients in the [0, Q - 1] range according to the constraint just set above
-            // //      -> quotient_times_cyclo has coefficients in the [0, (Q-1) * (Q-1) * (N+1)] range according to the above analysis
-            // //      -> (Q-1) * (Q-1) * (N+1) + (Q-1) is the maximum value that a quotient of remainder + quotient_times_cyclo can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Addition section
-            // //         Therefore Q and N must be chosen such that (Q-1) * (Q-1) * (N+1) + (Q-1) < p, where p is the modulus of the circuit field.
+            let quotient_0_times_cyclo_plus_remainder_0 =
+                quotient_0_times_cyclo.add(ctx_gate, remainder_0.clone(), range.gate());
 
-            // constrain_poly_reduction_by_cyclo::<{ 2 * N - 2 }, N, Q, F>(
-            //     &pk0_u,
-            //     cyclo_with_length.clone(),
-            //     quotient_0_with_length,
-            //     quotient_0_times_cyclo_with_length,
-            //     remainder_0_with_length.clone(),
-            //     range,
-            //     ctx_gate,
-            //     ctx_rlc,
-            //     rlc,
-            // );
+            // Reduce the coefficients of quotient_0_times_cyclo_plus_remainder_0 by modulo `Q`
+            let quotient_0_times_cyclo_plus_remainder_0_reduced =
+                quotient_0_times_cyclo_plus_remainder_0.reduce_by_modulo(ctx_gate, range, Q);
 
-            // let pk0_u = remainder_0_with_length.get_poly().clone();
+            // Enforce equality between pk0_u and quotient_0_times_cyclo_plus_remainder_0_reduced
 
-            // assert_eq!(pk0_u.len() - 1, 2 * N - 2);
-
-            // // pk0_u is a polynomial of degree 2*N - 2
-            // // pk0_u now has coefficients in the [0, Q-1] range
+            // pk0_u is a polynomial of degree 2*N - 2
+            // pk0_u now has coefficients in the [0, Q-1] range
 
             // // But actually, the degree of pk0_u should be N - 1 after reduction by the cyclo polynomial, the first N - 1 coefficients are just zeroes
 
