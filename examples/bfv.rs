@@ -1,7 +1,7 @@
 use axiom_eth::keccak::KeccakChip;
 use axiom_eth::{EthChip, Field};
 use clap::Parser;
-use halo2_base::safe_types::RangeInstructions;
+use halo2_base::gates::RangeInstructions;
 use halo2_base::{AssignedValue, Context};
 use halo2_scaffold::scaffold::{cmd::Cli, run_eth};
 use serde::{Deserialize, Serialize};
@@ -62,11 +62,8 @@ const B: u64 = 19;
 // const B: u64 = 19;
 
 /// BFV Encryption circuit
-///
-/// # Generic Parameters
-/// * `N`: Degree of the cyclotomic polynomial `cyclo` of the polynomial ring. Set as generic parameter as it defines the structure of the circuit and should be known at key generation time
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CircuitInput<const N: usize> {
+pub struct CircuitInput {
     pub pk0: Vec<String>, // PUBLIC INPUT. Should live in R_q according to assumption
     pub pk1: Vec<String>, // PUBLIC INPUT. Should live in R_q according to assumption
     pub m: Vec<String>,   // PRIVATE INPUT. Should in R_t (enforced inside the circuit)
@@ -82,7 +79,7 @@ fn bfv_encryption_circuit<F: Field>(
     ctx: &mut Context<F>,
     _eth_chip: &EthChip<F>,
     _keccak: &mut KeccakChip<F>,
-    input: CircuitInput<N>,
+    input: CircuitInput,
     make_public: &mut Vec<AssignedValue<F>>,
 ) -> impl FnOnce(&mut Context<F>, &mut Context<F>, &EthChip<F>) + Clone {
     // Transform the input polynomials strings into `Poly`
@@ -96,6 +93,17 @@ fn bfv_encryption_circuit<F: Field>(
     let c1_unassigned = Poly::from_string(input.c1);
     let cyclo_unassigned = Poly::from_string(input.cyclo);
 
+    // Assert the degree of the input polynomials
+    assert_eq!(pk0_unassigned.deg(), N - 1);
+    assert_eq!(pk1_unassigned.deg(), N - 1);
+    assert_eq!(m_unassigned.deg(), N - 1);
+    assert_eq!(u_unassigned.deg(), N - 1);
+    assert_eq!(e0_unassigned.deg(), N - 1);
+    assert_eq!(e1_unassigned.deg(), N - 1);
+    assert_eq!(c0_unassigned.deg(), N - 1);
+    assert_eq!(c1_unassigned.deg(), N - 1);
+    assert_eq!(cyclo_unassigned.deg(), N);
+
     // The circuit logic requires to access some random value
     // In order to draw randomness within the circuit we use Axiom's Challenge API (https://hackmd.io/@axiom/SJw3p-qX3)
     // Challenge API requires a Phase 0 of witness generation. During this phase, all the input polynomials are assigned to the circuit witness table.
@@ -105,15 +113,15 @@ fn bfv_encryption_circuit<F: Field>(
     // must be assigned in phase 0 so their values can be part of the Phase 0 commtiment and contribute to the challenge (gamma) used in Phase 1.
 
     // Phase 0: Assign the input polynomials to the circuit witness table
-    let pk0 = PolyChip::<{ N - 1 }, F>::new(pk0_unassigned.clone(), ctx);
-    let pk1 = PolyChip::<{ N - 1 }, F>::new(pk1_unassigned.clone(), ctx);
-    let m = PolyChip::<{ N - 1 }, F>::new(m_unassigned, ctx);
-    let u = PolyChip::<{ N - 1 }, F>::new(u_unassigned.clone(), ctx);
-    let e0 = PolyChip::<{ N - 1 }, F>::new(e0_unassigned, ctx);
-    let e1 = PolyChip::<{ N - 1 }, F>::new(e1_unassigned, ctx);
-    let c0 = PolyChip::<{ N - 1 }, F>::new(c0_unassigned, ctx);
-    let c1 = PolyChip::<{ N - 1 }, F>::new(c1_unassigned, ctx);
-    let cyclo = PolyChip::<{ N }, F>::new(cyclo_unassigned.clone(), ctx);
+    let pk0 = PolyChip::<F>::from_poly(pk0_unassigned.clone(), ctx);
+    let pk1 = PolyChip::<F>::from_poly(pk1_unassigned.clone(), ctx);
+    let m = PolyChip::<F>::from_poly(m_unassigned, ctx);
+    let u = PolyChip::<F>::from_poly(u_unassigned.clone(), ctx);
+    let e0 = PolyChip::<F>::from_poly(e0_unassigned, ctx);
+    let e1 = PolyChip::<F>::from_poly(e1_unassigned, ctx);
+    let c0 = PolyChip::<F>::from_poly(c0_unassigned, ctx);
+    let c1 = PolyChip::<F>::from_poly(c1_unassigned, ctx);
+    let cyclo = PolyChip::<F>::from_poly(cyclo_unassigned.clone(), ctx);
 
     // DELTA is equal to Q/T rounded to the lower integer from BFV paper
     const DELTA: u64 = Q / T;
@@ -141,8 +149,8 @@ fn bfv_encryption_circuit<F: Field>(
     let mut pk1_u_unassigned = pk1_unassigned.mul(&u_unassigned);
 
     // assign pk0_u_unassigned and pk1_u_unassigned to the circuit
-    let pk0_u = PolyChip::<{ 2 * N - 2 }, F>::new(pk0_u_unassigned.clone(), ctx);
-    let pk1_u = PolyChip::<{ 2 * N - 2 }, F>::new(pk1_u_unassigned.clone(), ctx);
+    let pk0_u = PolyChip::<F>::from_poly(pk0_u_unassigned.clone(), ctx);
+    let pk1_u = PolyChip::<F>::from_poly(pk1_u_unassigned.clone(), ctx);
 
     // Reduce pk0_u_unassigned and pk1_u_unassigned by modulo Q
     pk0_u_unassigned.reduce_by_modulus(Q);
@@ -174,21 +182,20 @@ fn bfv_encryption_circuit<F: Field>(
     // Note: we are still in Phase 0 of the witness generation
 
     // Assign quotient_0 and quotient_1 to the circuit
-    let quotient_0 = PolyChip::<{ N }, F>::new(quotient_0_unassigned, ctx);
-    let quotient_1 = PolyChip::<{ N }, F>::new(quotient_1_unassigned, ctx);
+    let quotient_0 = PolyChip::<F>::from_poly(quotient_0_unassigned, ctx);
+    let quotient_1 = PolyChip::<F>::from_poly(quotient_1_unassigned, ctx);
 
-    // // Assign quotient_0_times_cyclo_unassigned and quotient_1_times_cyclo_unassigned to the circuit
-    let quotient_0_times_cyclo =
-        PolyChip::<{ 2 * N }, F>::new(quotient_0_times_cyclo_unassigned, ctx);
-    let quotient_1_times_cyclo =
-        PolyChip::<{ 2 * N }, F>::new(quotient_1_times_cyclo_unassigned, ctx);
+    // Assign quotient_0_times_cyclo_unassigned and quotient_1_times_cyclo_unassigned to the circuit
+
+    let quotient_0_times_cyclo = PolyChip::<F>::from_poly(quotient_0_times_cyclo_unassigned, ctx);
+    let quotient_1_times_cyclo = PolyChip::<F>::from_poly(quotient_1_times_cyclo_unassigned, ctx);
 
     // Assign the remainder_0 and remainder_1 to the circuit
-    let remainder_0 = PolyChip::<{ 2 * N }, F>::new(remainder_0_unassigned, ctx);
-    let remainder_1 = PolyChip::<{ 2 * N }, F>::new(remainder_1_unassigned, ctx);
+    let remainder_0 = PolyChip::<F>::from_poly(remainder_0_unassigned, ctx);
+    let remainder_1 = PolyChip::<F>::from_poly(remainder_1_unassigned, ctx);
 
-    // // Phase 0 is over, we can now move to Phase 1, in which we will leverage the random challenge generated during Phase 0.
-    // // According to the design of this API, all the constraints must be written inside a callback function.
+    // Phase 0 is over, we can now move to Phase 1, in which we will leverage the random challenge generated during Phase 0.
+    // According to the design of this API, all the constraints must be written inside a callback function.
 
     #[allow(clippy::let_and_return)]
     let callback =
@@ -256,55 +263,13 @@ fn bfv_encryption_circuit<F: Field>(
             quotient_0.check_coefficients_in_modulus_field(ctx_gate, range, Q);
             remainder_0.check_coefficients_in_modulus_field(ctx_gate, range, Q);
 
-            // constrain the polynomial multiplication between quotient_0 and cyclo to be equal to quotient_0_times_cyclo using the `constrain_poly_mul` chip
-            quotient_0.constrain_poly_mul(
-                cyclo,
-                quotient_0_times_cyclo.clone(),
-                ctx_gate,
-                ctx_rlc,
-                rlc,
-            );
+            // remainder_0 is the reduction of pk0_u by the cyclotomic polynomial
+            // remainder_0 is now a polynomial of degree 2*N
+            // remainder_0 now has coefficients in the [0, Q-1] range
 
-            // quotient_0_times_cyclo is a polynomial of degree 2*N
-            // quotient_0_times_cyclo has coefficients in the [0, (Q-1) * (Q-1) * (N+1)] range. This is the maximum value that a coefficient of quotient_0_times_cyclo can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Multiplication section
+            // But actually, the degree of remainder_0 should be N - 1 after reduction by the cyclo polynomial, the first N + 1 coefficients are just zeroes
 
-            // compute the addition between quotient_0_times_cyclo and remainder_0
-            // The assumption of the `poly_add` chip is that the coefficients of the input polynomials are constrained such to avoid overflow during the polynomial addition
-            //      -> remainder has coefficients in the [0, Q - 1] range according to the constraint just set above
-            //      -> quotient_times_cyclo has coefficients in the [0, (Q-1) * (Q-1) * (N+1)]
-            //      -> (Q-1) * (Q-1) * (N+1) + (Q-1) is the maximum value that a quotient of remainder + quotient_times_cyclo can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Addition section
-            //         Therefore Q and N must be chosen such that (Q-1) * (Q-1) * (N+1) + (Q-1) < p, where p is the modulus of the circuit field.
-
-            let quotient_0_times_cyclo_plus_remainder_0 =
-                quotient_0_times_cyclo.add(ctx_gate, remainder_0.clone(), range.gate());
-
-            // Reduce the coefficients of quotient_0_times_cyclo_plus_remainder_0 by modulo `Q`
-            let quotient_0_times_cyclo_plus_remainder_0_reduced =
-                quotient_0_times_cyclo_plus_remainder_0.reduce_by_modulo(ctx_gate, range, Q);
-
-            // Enforce equality between pk0_u and quotient_0_times_cyclo_plus_remainder_0_reduced
-
-            // pk0_u is a polynomial of degree 2*N - 2
-            // pk0_u now has coefficients in the [0, Q-1] range
-
-            // // But actually, the degree of pk0_u should be N - 1 after reduction by the cyclo polynomial, the first N - 1 coefficients are just zeroes
-
-            // // 1.4 Enforce that the first N - 1 coefficients of pk0_u are zeroes
-            // for pk0_u_element in pk0_u.iter().take(N - 1) {
-            //     let bool = range
-            //         .gate()
-            //         .is_equal(ctx_gate, *pk0_u_element, Constant(F::from(0)));
-            //     range.gate().assert_is_const(ctx_gate, &bool, &F::from(1));
-            // }
-
-            // // Therefore, we can safely trim the first N - 1 coefficients from pk0_u
-
-            // let pk0_u_trimmed: Vec<_> = pk0_u.iter().skip(N - 1).cloned().collect();
-
-            // // assert that the degree of pk0_u_trimmed is N - 1
-            // assert_eq!(pk0_u_trimmed.len() - 1, N - 1);
-
-            // // pk0_u_trimmed is a polynomial in the R_q ring!
+            // pk0_u_trimmed is a polynomial in the R_q ring!
 
             // 1.5 m * delta
 

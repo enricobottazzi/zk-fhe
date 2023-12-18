@@ -16,29 +16,20 @@ use num_traits::Num;
 /// The polynomial is represented as a vector of AssignedValue
 /// `max_num_bits` is the maximum number of bits of the coefficients of the polynomial. We need to keep track of this value to warn for risk of  overflow during the polynomial operations
 #[derive(Clone, Debug)]
-pub struct PolyChip<const DEG: usize, F: Field>
-where
-    [(); DEG + 1]: Sized,
-{
-    pub assigned_coefficients: [AssignedValue<F>; DEG + 1],
+pub struct PolyChip<F: Field> {
+    pub assigned_coefficients: Vec<AssignedValue<F>>,
     pub max_num_bits: usize,
+    pub degree: usize,
 }
 
-impl<const DEG: usize, F: Field> PolyChip<DEG, F>
-where
-    [(); DEG + 1]: Sized,
-    [(); DEG * 2 + 1]: Sized,
-    [(); DEG - 2 + 1]: Sized,
-{
-    /// Assign the coefficients of the polynomial
-    pub fn new(poly: Poly, ctx: &mut Context<F>) -> Self {
-        // assert that the degree of the input polynomial is equal to DEG
-        assert_eq!(poly.deg(), DEG);
-
+impl<F: Field> PolyChip<F> {
+    /// Build `PolyChip` from a `Poly`
+    pub fn from_poly(poly: Poly, ctx: &mut Context<F>) -> Self {
         let mut assigned_coefficients = vec![];
         let mut max_num_bits = 0;
+        let deg = poly.deg();
 
-        for item in poly.coefficients.iter().take(DEG + 1) {
+        for item in poly.coefficients.iter().take(deg + 1) {
             let num_bits = item.bits();
             let val = bigint_to_fe(item);
             let assigned_coeff = ctx.load_witness(val);
@@ -49,8 +40,22 @@ where
         }
 
         Self {
-            assigned_coefficients: assigned_coefficients.try_into().unwrap(),
+            assigned_coefficients,
             max_num_bits: max_num_bits as usize,
+            degree: deg,
+        }
+    }
+
+    /// Build `PolyChip` from a vector of `AssignedValue`
+    pub fn from_assigned_values(
+        assigned_coefficients: Vec<AssignedValue<F>>,
+        max_num_bits: usize,
+    ) -> Self {
+        let deg = assigned_coefficients.len() - 1;
+        Self {
+            assigned_coefficients,
+            max_num_bits,
+            degree: deg,
         }
     }
 
@@ -77,11 +82,11 @@ where
     /// Note that the constraint will fail if the coefficients of the resulting polynomial c overflows the prime field p.
     ///
     /// # Assumptions
-    /// * The coefficients of the polynomial `c` have not overflowed the prime field p during the assignment phase
+    /// * The coefficients of the polynomial `c` have not overflowed the prime field p during the assignment phase. Otherwise, the constraint will fail.
     pub fn constrain_poly_mul(
         &self,
-        b: PolyChip<DEG, F>,
-        c: PolyChip<{ DEG * 2 }, F>,
+        b: PolyChip<F>,
+        c: PolyChip<F>,
         ctx_gate: &mut Context<F>,
         ctx_rlc: &mut Context<F>,
         rlc: &RlcChip<F>,
@@ -94,7 +99,7 @@ where
         assert!(c_max_bits < p_bits.try_into().unwrap());
 
         // `compute_rlc` evaluates the polynomial at gamma and returns the evaluation
-        let poly_a_trace = rlc.compute_rlc_fixed_len(ctx_rlc, self.assigned_coefficients);
+        let poly_a_trace = rlc.compute_rlc_fixed_len(ctx_rlc, self.assigned_coefficients.clone());
         let poly_a_eval_assigned = poly_a_trace.rlc_val;
 
         let poly_b_trace = rlc.compute_rlc_fixed_len(ctx_rlc, b.assigned_coefficients);
@@ -119,18 +124,10 @@ where
     ///
     /// # Assumptions
     /// * the coefficients are constrained such to avoid overflow during the polynomial addition
-    pub fn add(
-        &self,
-        ctx: &mut Context<F>,
-        other: PolyChip<DEG, F>,
-        gate: &GateChip<F>,
-    ) -> PolyChip<DEG, F>
-    where
-        [(); DEG + 1]: Sized,
-    {
+    pub fn add(&self, ctx: &mut Context<F>, other: PolyChip<F>, gate: &GateChip<F>) -> PolyChip<F> {
         let mut output = vec![];
 
-        for i in 0..=DEG {
+        for i in 0..=self.degree {
             let val = gate.add(
                 ctx,
                 self.assigned_coefficients[i],
@@ -139,10 +136,9 @@ where
             output.push(val);
         }
 
-        PolyChip {
-            assigned_coefficients: output.try_into().unwrap(),
-            max_num_bits: max(self.max_num_bits, other.max_num_bits) + 1,
-        }
+        let max_num_bits_output = max(self.max_num_bits, other.max_num_bits) + 1;
+
+        PolyChip::from_assigned_values(output, max_num_bits_output)
     }
 
     /// Multiply polynomial by a scalar
@@ -154,14 +150,11 @@ where
         ctx: &mut Context<F>,
         scalar: &AssignedValue<F>,
         gate: &GateChip<F>,
-    ) -> PolyChip<DEG, F>
-    where
-        [(); DEG + 1]: Sized,
-    {
+    ) -> PolyChip<F> {
         let mut output = vec![];
         let scalar_big_int_bits = fe_to_bigint(scalar.value()).bits();
 
-        for item in self.assigned_coefficients.iter().take(DEG + 1) {
+        for item in self.assigned_coefficients.iter().take(self.degree + 1) {
             let val = gate.mul(ctx, *item, *scalar);
             output.push(val);
         }
@@ -176,10 +169,7 @@ where
             "Risk of overflow detected in scalar_mul"
         );
 
-        PolyChip {
-            assigned_coefficients: output.try_into().unwrap(),
-            max_num_bits: max_num_bits_output,
-        }
+        PolyChip::from_assigned_values(output, max_num_bits_output)
     }
 
     /// Reduce the coefficients of the polynomial by `modulus``
@@ -188,15 +178,12 @@ where
         ctx: &mut Context<F>,
         range: &RangeChip<F>,
         modulus: u64,
-    ) -> PolyChip<DEG, F>
-    where
-        [(); DEG + 1]: Sized,
-    {
+    ) -> PolyChip<F> {
         let mut output = vec![];
         // Enforce that self.assigned_coefficients[i] % modulus = output[i]
         // Note that `div_mod` requires the value to be reduced to be at most `num_bits`
         let num_bits = self.max_num_bits;
-        for i in 0..=DEG {
+        for i in 0..=self.degree {
             let reduced_coeff = range
                 .div_mod(ctx, self.assigned_coefficients[i], modulus, num_bits)
                 .1;
@@ -206,9 +193,23 @@ where
         // `max_num_bits` of the output polynomial is equal to the number of bits of `modulus` after the reduction
         let max_num_bits = BigInt::from(modulus).bits() as usize;
 
-        PolyChip {
-            assigned_coefficients: output.try_into().unwrap(),
-            max_num_bits,
+        PolyChip::from_assigned_values(output, max_num_bits)
+    }
+
+    /// Constrain polynomial to be equal to other
+    pub fn constrain_poly_equal(
+        &self,
+        ctx: &mut Context<F>,
+        other: PolyChip<F>,
+        gate: &GateChip<F>,
+    ) {
+        for i in 0..=self.degree {
+            let bool = gate.is_equal(
+                ctx,
+                self.assigned_coefficients[i],
+                other.assigned_coefficients[i],
+            );
+            gate.assert_is_const(ctx, &bool, &F::from(1))
         }
     }
 
