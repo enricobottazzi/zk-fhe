@@ -83,7 +83,7 @@ impl<F: Field> PolyChip<F> {
     ///
     /// # Assumptions
     /// * The coefficients of the polynomial `c` have not overflowed the prime field p during the assignment phase. Otherwise, the constraint will fail.
-    pub fn constrain_poly_mul(
+    pub fn constrain_mul(
         &self,
         b: PolyChip<F>,
         c: PolyChip<F>,
@@ -120,7 +120,7 @@ impl<F: Field> PolyChip<F> {
         );
     }
 
-    /// Sum polynomial and other
+    /// Compute self + other
     ///
     /// # Assumptions
     /// * the coefficients are constrained such to avoid overflow during the polynomial addition
@@ -141,7 +141,7 @@ impl<F: Field> PolyChip<F> {
         PolyChip::from_assigned_values(output, max_num_bits_output)
     }
 
-    /// Multiply polynomial by a scalar
+    /// Compute self * scalar
     ///
     /// # Assumptions
     /// * the coefficients are constrained such to avoid overflow during the polynomial scalar multiplication
@@ -172,6 +172,47 @@ impl<F: Field> PolyChip<F> {
         PolyChip::from_assigned_values(output, max_num_bits_output)
     }
 
+    /// Enforce that `self` = `quotient` * `cyclo` + `remainder` and returns the (trimmed) remainder
+    ///
+    /// # Assumptions
+    /// * the coefficients of quotient have to be in the range [0, Q - 1]
+    /// * the coefficients of remainder have to be in the range [0, Q - 1]
+    /// * the coefficients are constrained such to avoid overflow during the polynomial addition between `quotient_times_cyclo` and `remainder`
+    pub fn reduce_by_cyclo(
+        &self,
+        cyclo: PolyChip<F>,
+        quotient: PolyChip<F>,
+        quotient_times_cyclo: PolyChip<F>,
+        remainder: PolyChip<F>,
+        range: &RangeChip<F>,
+        ctx_gate: &mut Context<F>,
+        ctx_rlc: &mut Context<F>,
+        rlc: &RlcChip<F>,
+        modulus: u64,
+    ) -> PolyChip<F> {
+        let cyclo_deg = cyclo.degree;
+
+        // Constrain that quotient * cyclo = quotient_times_cyclo
+        quotient.constrain_mul(cyclo, quotient_times_cyclo.clone(), ctx_gate, ctx_rlc, rlc);
+
+        // Perform the addition between quotient_times_cyclo and remainder
+        let sum = quotient_times_cyclo.add(ctx_gate, remainder.clone(), range.gate());
+
+        // Reduce the coefficients of sum modulo Q to make them in the range [0, Q - 1]
+        sum.reduce_by_modulo(ctx_gate, range, modulus);
+
+        // Safely trim the leading zeroes of the sum up to `degree`
+        let sum_trimmed = sum.safe_trim_leading_zeroes(ctx_gate, range, self.degree);
+
+        // Enforce that sum_trimmed = self
+        sum_trimmed.constrain_equality(ctx_gate, self.clone(), range.gate());
+
+        // Remainder is a polynomial of degree n * 2, where n is the degree of cyclo
+        // After the reduction by cyclo, the degree of remainder is at most n - 1
+        // Therefore, we can safely trim the leading zeroes of the remainder up to n - 1
+        remainder.safe_trim_leading_zeroes(ctx_gate, range, cyclo_deg - 1)
+    }
+
     /// Reduce the coefficients of the polynomial by `modulus``
     pub fn reduce_by_modulo(
         &self,
@@ -196,13 +237,8 @@ impl<F: Field> PolyChip<F> {
         PolyChip::from_assigned_values(output, max_num_bits)
     }
 
-    /// Constrain polynomial to be equal to other
-    pub fn constrain_poly_equal(
-        &self,
-        ctx: &mut Context<F>,
-        other: PolyChip<F>,
-        gate: &GateChip<F>,
-    ) {
+    /// Enforce that self = other
+    pub fn constrain_equality(&self, ctx: &mut Context<F>, other: PolyChip<F>, gate: &GateChip<F>) {
         for i in 0..=self.degree {
             let bool = gate.is_equal(
                 ctx,
@@ -217,7 +253,7 @@ impl<F: Field> PolyChip<F> {
     ///
     /// # Assumptions
     /// * z < y
-    pub fn check_poly_coefficients_in_range(
+    pub fn constrain_coefficients_in_range(
         &self,
         ctx: &mut Context<F>,
         range: &RangeChip<F>,
@@ -281,7 +317,7 @@ impl<F: Field> PolyChip<F> {
     }
 
     /// Enforce that polynomial is sampled from the distribution chi key. Namely, that the coefficients are in the range [0, 1, Z].
-    pub fn check_poly_from_distribution_chi_key(
+    pub fn constrain_from_distribution_chi_key(
         &self,
         ctx: &mut Context<F>,
         gate: &GateChip<F>,
@@ -319,7 +355,7 @@ impl<F: Field> PolyChip<F> {
     }
 
     /// Enforce that the coefficients of the polynomial are in the modulus field
-    pub fn check_coefficients_in_modulus_field(
+    pub fn constrain_coefficients_in_modulus_field(
         &self,
         ctx: &mut Context<F>,
         range: &RangeChip<F>,
@@ -329,5 +365,37 @@ impl<F: Field> PolyChip<F> {
         for coeff in self.assigned_coefficients.iter() {
             range.check_less_than_safe(ctx, *coeff, modulus);
         }
+    }
+
+    /// Safely trim the first leading zeroes of the polynomial up to `degree`
+    /// Example: if self of degree 8 is [0, 0, 1, 1, 1, 1, 1, 1, 1] and degree = 6, then the output is [1, 1, 1, 1, 1, 1, 1]
+    ///
+    /// # Assumptions
+    /// * The first `degree` coefficients of the polynomial are known to be zero, otherwise the constraint will fail
+    /// * `degree` <= `self.degree``
+    pub fn safe_trim_leading_zeroes(
+        &self,
+        ctx: &mut Context<F>,
+        range: &RangeChip<F>,
+        degree: usize,
+    ) -> PolyChip<F> {
+        assert!(degree <= self.degree);
+
+        for i in 0..self.degree - degree {
+            let bool = range.gate.is_zero(ctx, self.assigned_coefficients[i]);
+            range.gate.assert_is_const(ctx, &bool, &F::from(1));
+        }
+
+        // Now we can safely trim the first self.degree - degree coefficients from self
+        let trimmed_coefficients: Vec<_> = self
+            .assigned_coefficients
+            .iter()
+            .skip(self.degree - degree)
+            .cloned()
+            .collect();
+
+        let max_num_bits = self.max_num_bits;
+
+        PolyChip::from_assigned_values(trimmed_coefficients, max_num_bits)
     }
 }
