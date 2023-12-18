@@ -326,6 +326,64 @@ fn bfv_encryption_circuit<F: Field>(
 
             // 1.8 Enforce equality between c0 and expected_c0 using equality check
             c0.constrain_equality(ctx_gate, expected_c0, range.gate());
+
+            // 2. COMPUTE C1 (c1 is the second ciphertext component)
+
+            // 2.1 pk1 * u
+            // Constrain the polynomial multiplication between pk1 and u to be equal to pk1_u using the `constrain_poly_mul` chip
+            pk1.constrain_mul(u.clone(), pk1_u.clone(), ctx_gate, ctx_rlc, rlc);
+
+            // pk1_u is a polynomial of degree (N - 1) * 2 = 2*N - 2
+            // pk1_u has coefficients in the [0, (Q-1) * (Q-1) * (N+1)] range. This is the maximum value that a coefficient of pk1_u can take. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Multiplication section
+
+            // 2.2 Reduce the coefficients of pk1_u by modulo `Q`
+            let pk1_u = pk1_u.reduce_by_modulo(ctx_gate, range, Q);
+
+            // pk1_u is a polynomial of degree (N - 1) * 2 = 2 * N - 2
+            // pk1_u now has coefficients in the [0, Q-1] after reduction by modulo Q
+            // cyclo is a polynomial of degree N
+
+            // 2.3 Reduce pk1_u by the cyclo polynomial
+
+            // constrain the coefficients of quotient_1 and remainder_1 to be in the [0, Q-1] range
+            quotient_1.constrain_coefficients_in_modulus_field(ctx_gate, range, Q);
+            remainder_1.constrain_coefficients_in_modulus_field(ctx_gate, range, Q);
+
+            let pk1_u = pk1_u.reduce_by_cyclo(
+                cyclo.clone(),
+                quotient_1,
+                quotient_1_times_cyclo,
+                remainder_1,
+                range,
+                ctx_gate,
+                ctx_rlc,
+                rlc,
+                Q,
+            );
+
+            // pk1_u is the reduction of pk1_u by the cyclotomic polynomial
+            // pk1_u is a polynomial of degree N - 1
+            // pk1_u now has coefficients in the [0, Q-1] range
+
+            // 2.4 c1 = pk1_u + e1
+
+            // Perform the polynomial addition between pk1_1 and e0.
+            // The assumption of the `poly_add` chip is that the coefficients of the input polynomials are constrained such to avoid overflow during the polynomial addition
+            // `pk1_u` has coefficients in the [0, Q-1] range according to the constraint set above
+            // `e1` has coefficients in the [0, B] OR [Q-B, Q-1] range according to the constraint set above
+            // The coefficients of c1 are in the [0, 2Q - 2] range. Why? Answer is here -> https://hackmd.io/@letargicus/Bk4KtYkSp - Polynomial Addition section
+            // Q must be chosen such that 2Q - 2 < p, where p is the modulus of the circuit field.
+            let c1 = pk1_u.add(ctx_gate, e1, range.gate());
+
+            // 2.5 Reduce the coefficients of `c1` by modulo `Q`
+
+            let c1 = c1.reduce_by_modulo(ctx_gate, range, Q);
+
+            // Note: Addition does not change the degree of the polynomial, therefore we do not need to reduce the coefficients by the cyclotomic polynomial of degree `N` => x^N + 1
+            // c1 is a polynomial in the R_q ring!
+
+            // 2.6 Enforce equality between c1 and expected_c1 using equality check
+            c1.constrain_equality(ctx_gate, expected_c1, range.gate());
         };
 
     callback

@@ -199,10 +199,10 @@ impl<F: Field> PolyChip<F> {
         let sum = quotient_times_cyclo.add(ctx_gate, remainder.clone(), range.gate());
 
         // Reduce the coefficients of sum modulo Q to make them in the range [0, Q - 1]
-        sum.reduce_by_modulo(ctx_gate, range, modulus);
+        let sum_mod = sum.reduce_by_modulo(ctx_gate, range, modulus);
 
         // Safely trim the leading zeroes of the sum up to `degree`
-        let sum_trimmed = sum.safe_trim_leading_zeroes(ctx_gate, range, self.degree);
+        let sum_trimmed = sum_mod.safe_trim_leading_zeroes(ctx_gate, range, self.degree);
 
         // Enforce that sum_trimmed = self
         sum_trimmed.constrain_equality(ctx_gate, self.clone(), range.gate());

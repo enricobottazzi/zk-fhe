@@ -64,8 +64,8 @@ cargo run --example bfv -- --name bfv -k 9 --input bfv.in verify
 
 ## Benchmarks
 
-- **Proving time: 9.5s** 
-- **Verification time: 312ms**
+- **Proving time: 8.5s** 
+- **Verification time: 299ms**
 
 Benches run using `bfv_2` run on M2 Macbook Pro with 12 cores and 32GB of RAM.
 
