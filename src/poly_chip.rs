@@ -18,7 +18,7 @@ use num_traits::Num;
 #[derive(Clone, Debug)]
 pub struct PolyChip<F: Field> {
     pub assigned_coefficients: Vec<AssignedValue<F>>,
-    pub max_num_bits: usize,
+    pub max_num_bits: u64,
     pub degree: usize,
 }
 
@@ -26,30 +26,25 @@ impl<F: Field> PolyChip<F> {
     /// Build `PolyChip` from a `Poly`
     pub fn from_poly(poly: Poly, ctx: &mut Context<F>) -> Self {
         let mut assigned_coefficients = vec![];
-        let mut max_num_bits = 0;
         let deg = poly.deg();
 
         for item in poly.coefficients.iter().take(deg + 1) {
-            let num_bits = item.bits();
             let val = bigint_to_fe(item);
             let assigned_coeff = ctx.load_witness(val);
             assigned_coefficients.push(assigned_coeff);
-            if num_bits > max_num_bits {
-                max_num_bits = num_bits;
-            }
         }
 
         Self {
             assigned_coefficients,
-            max_num_bits: max_num_bits as usize,
+            max_num_bits: poly.max_bits,
             degree: deg,
         }
     }
 
     /// Build `PolyChip` from a vector of `AssignedValue`
-    pub fn from_assigned_values(
+    fn from_assigned_values(
         assigned_coefficients: Vec<AssignedValue<F>>,
-        max_num_bits: usize,
+        max_num_bits: u64,
     ) -> Self {
         let deg = assigned_coefficients.len() - 1;
         Self {
@@ -66,18 +61,18 @@ impl<F: Field> PolyChip<F> {
         }
     }
 
-    /// Enforce that self * b = c
+    /// Enforce that `self * b = c`.
     /// This constraint leverages the Axiom's Challenge API
     /// The challenge API allows us to access a random challenge gamma inside the circuit.
-    /// Any polynomial identity can be checked using gamma. e.g. p(x) = q(x) with high probability if p(gamma) = q(gamma) for a challenge gamma
-    /// because a random gamma has vanishing probability of being a root of p(x) - q(x).
-    /// Analogously, we can check the identity a(gamma) * b(gamma) = c(gamma) for a random gamma.
+    /// Any polynomial identity can be checked using gamma. e.g. `p(x) = q(x)` with high probability if `p(gamma) = q(gamma)` for a challenge gamma
+    /// because a random gamma has vanishing probability of being a root of `p(x) - q(x)`.
+    /// Analogously, we can check the identity `a(gamma) * b(gamma) = c(gamma)` for a random gamma.
     ///
     /// Complexity:
-    /// Computing the polynomial multiplication using the direct method would take O(N^2) constraints
-    /// This algorithm takes O(N) constraints as it requires to:
+    /// Computing the polynomial multiplication using the direct method would take `O(N^2)` constraints
+    /// This algorithm takes `O(N)`` constraints as it requires to:
     /// - Evaluate the polynomials a, b and c at gamma (3N constraints)
-    /// - Enforce the identity a(gamma) * b(gamma) - c(gamma) = 0 (1 constraint)
+    /// - Enforce the identity `a(gamma) * b(gamma) - c(gamma) = 0` (1 constraint)
     ///
     /// Note that the constraint will fail if the coefficients of the resulting polynomial c overflows the prime field p.
     ///
@@ -91,12 +86,12 @@ impl<F: Field> PolyChip<F> {
         ctx_rlc: &mut Context<F>,
         rlc: &RlcChip<F>,
     ) {
-        // Assert that `max_num_bits` of the coefficients of the polynomial `c` is less than the number of bits of the modulus of the circuit field
+        // Assert that `max_num_bits` of the coefficients of the polynomial `c` is less than the number of bits of the modulus of the circuit field. Otherwise, the constraint will fail.
         let p = BigInt::from_str_radix(&F::MODULUS[2..], 16).unwrap();
         let p_bits = p.bits();
         let c_max_bits = c.max_num_bits;
 
-        assert!(c_max_bits < p_bits.try_into().unwrap());
+        assert!(c_max_bits < p_bits);
 
         // `compute_rlc` evaluates the polynomial at gamma and returns the evaluation
         let poly_a_trace = rlc.compute_rlc_fixed_len(ctx_rlc, self.assigned_coefficients.clone());
@@ -120,7 +115,7 @@ impl<F: Field> PolyChip<F> {
         );
     }
 
-    /// Compute self + other
+    /// Compute `self + other`
     ///
     /// # Assumptions
     /// * the coefficients are constrained such to avoid overflow during the polynomial addition
@@ -137,11 +132,18 @@ impl<F: Field> PolyChip<F> {
         }
 
         let max_num_bits_output = max(self.max_num_bits, other.max_num_bits) + 1;
+        let p = BigInt::from_str_radix(&F::MODULUS[2..], 16).unwrap();
+        let p_bits = p.bits();
+
+        assert!(
+            max_num_bits_output < p_bits,
+            "Risk of overflow detected in add"
+        );
 
         PolyChip::from_assigned_values(output, max_num_bits_output)
     }
 
-    /// Compute self * scalar
+    /// Compute `self * scalar`
     ///
     /// # Assumptions
     /// * the coefficients are constrained such to avoid overflow during the polynomial scalar multiplication
@@ -151,23 +153,22 @@ impl<F: Field> PolyChip<F> {
         scalar: &AssignedValue<F>,
         gate: &GateChip<F>,
     ) -> PolyChip<F> {
+        let scalar_num_bits = fe_to_bigint(scalar.value()).bits();
+        let max_num_bits_output = self.max_num_bits + scalar_num_bits;
+        let p = BigInt::from_str_radix(&F::MODULUS[2..], 16).unwrap();
+        let p_bits = p.bits();
+
+        assert!(
+            max_num_bits_output < p_bits,
+            "Risk of overflow detected in scalar_mul"
+        );
+
         let mut output = vec![];
-        let scalar_big_int_bits = fe_to_bigint(scalar.value()).bits();
 
         for item in self.assigned_coefficients.iter().take(self.degree + 1) {
             let val = gate.mul(ctx, *item, *scalar);
             output.push(val);
         }
-
-        let max_num_bits_output = self.max_num_bits + scalar_big_int_bits as usize;
-
-        // Assert that `max_num_bits` of the coefficients of the polynomial is less than the number of bits of the modulus of the circuit field
-        let p = BigInt::from_str_radix(&F::MODULUS[2..], 16).unwrap();
-        let p_bits = p.bits();
-        assert!(
-            max_num_bits_output < p_bits as usize,
-            "Risk of overflow detected in scalar_mul"
-        );
 
         PolyChip::from_assigned_values(output, max_num_bits_output)
     }
@@ -175,8 +176,9 @@ impl<F: Field> PolyChip<F> {
     /// Enforce that `self` = `quotient` * `cyclo` + `remainder` and returns the (trimmed) remainder
     ///
     /// # Assumptions
-    /// * the coefficients of quotient have to be in the range [0, Q - 1]
-    /// * the coefficients of remainder have to be in the range [0, Q - 1]
+    /// * `cyclo` is a polynomial of the form `x^n + 1` where `n` is the degree of `cyclo`
+    /// * the coefficients of quotient have to be in the range `[0, modulus - 1]`
+    /// * the coefficients of remainder have to be in the range `[0, modulus - 1]`
     /// * the coefficients are constrained such to avoid overflow during the polynomial addition between `quotient_times_cyclo` and `remainder`
     pub fn reduce_by_cyclo(
         &self,
@@ -190,8 +192,15 @@ impl<F: Field> PolyChip<F> {
         rlc: &RlcChip<F>,
         modulus: u64,
     ) -> PolyChip<F> {
-        let cyclo_deg = cyclo.degree;
+        let modulus_bits = BigInt::from(modulus).bits();
+        assert!(quotient.max_num_bits <= modulus_bits);
+        assert!(remainder.max_num_bits <= modulus_bits);
 
+        let p = BigInt::from_str_radix(&F::MODULUS[2..], 16).unwrap();
+        let p_bits = p.bits();
+        assert!(max(quotient_times_cyclo.max_num_bits, remainder.max_num_bits) + 1 < p_bits);
+
+        let cyclo_deg = cyclo.degree;
         // Constrain that quotient * cyclo = quotient_times_cyclo
         quotient.constrain_mul(cyclo, quotient_times_cyclo.clone(), ctx_gate, ctx_rlc, rlc);
 
@@ -213,7 +222,7 @@ impl<F: Field> PolyChip<F> {
         remainder.safe_trim_leading_zeroes(ctx_gate, range, cyclo_deg - 1)
     }
 
-    /// Reduce the coefficients of the polynomial by `modulus``
+    /// Reduce the coefficients of the polynomial by `modulus`
     pub fn reduce_by_modulo(
         &self,
         ctx: &mut Context<F>,
@@ -226,18 +235,23 @@ impl<F: Field> PolyChip<F> {
         let num_bits = self.max_num_bits;
         for i in 0..=self.degree {
             let reduced_coeff = range
-                .div_mod(ctx, self.assigned_coefficients[i], modulus, num_bits)
+                .div_mod(
+                    ctx,
+                    self.assigned_coefficients[i],
+                    modulus,
+                    num_bits as usize,
+                )
                 .1;
             output.push(reduced_coeff);
         }
 
         // `max_num_bits` of the output polynomial is equal to the number of bits of `modulus` after the reduction
-        let max_num_bits = BigInt::from(modulus).bits() as usize;
+        let max_num_bits = BigInt::from(modulus).bits();
 
         PolyChip::from_assigned_values(output, max_num_bits)
     }
 
-    /// Enforce that self = other
+    /// Enforce that `self = other`
     pub fn constrain_equality(&self, ctx: &mut Context<F>, other: PolyChip<F>, gate: &GateChip<F>) {
         for i in 0..=self.degree {
             let bool = gate.is_equal(
@@ -249,7 +263,7 @@ impl<F: Field> PolyChip<F> {
         }
     }
 
-    /// Enforce that polynomial has coefficients in the range [0, z] or [y-z, y-1]
+    /// Enforce that polynomial has coefficients in the range `[0, z]` or `[y-z, y-1]`
     ///
     /// # Assumptions
     /// * z < y
@@ -280,7 +294,7 @@ impl<F: Field> PolyChip<F> {
 
         for coeff in self.assigned_coefficients.iter() {
             // First of all, enforce that coefficient is in the [0, 2^y_bits] range
-            let bool = range.is_less_than_safe(ctx, *coeff, (1 << y_bits as u64) + 1);
+            let bool = range.is_less_than_safe(ctx, *coeff, (1 << y_bits) + 1);
             range.gate().assert_is_const(ctx, &bool, &F::from(1));
 
             // Check for the range [0, z]
@@ -316,7 +330,7 @@ impl<F: Field> PolyChip<F> {
         }
     }
 
-    /// Enforce that polynomial is sampled from the distribution chi key. Namely, that the coefficients are in the range [0, 1, Z].
+    /// Enforce that polynomial is sampled from the distribution chi key. Namely, that the coefficients are either `0`, `1` or `z`.
     pub fn constrain_from_distribution_chi_key(
         &self,
         ctx: &mut Context<F>,
@@ -354,14 +368,13 @@ impl<F: Field> PolyChip<F> {
         }
     }
 
-    /// Enforce that the coefficients of the polynomial are in the modulus field
+    /// Enforce that the coefficients of the polynomial are in the modulus field `[0, modulus - 1]`
     pub fn constrain_coefficients_in_modulus_field(
         &self,
         ctx: &mut Context<F>,
         range: &RangeChip<F>,
         modulus: u64,
     ) {
-        // loop over all the coefficients of the polynomial and check that they are in the modulus field
         for coeff in self.assigned_coefficients.iter() {
             range.check_less_than_safe(ctx, *coeff, modulus);
         }
