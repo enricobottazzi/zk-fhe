@@ -24,13 +24,13 @@ use zk_fhe::poly_chip::PolyChip;
 ///
 /// Note: all the polynomials are expressed by their coefficients in the form [a_DEG, a_DEG-1, ..., a_1, a_0] where a_0 is the constant term
 
-// These are the parameters used for the test - to match with input file `data/bfv_1.in`
+// These are the parameters used for the test - to match with input file `data/bfv_test/bfv.in`
 const N: usize = 4;
 const Q: u64 = 4637;
 const T: u64 = 7;
 const B: u64 = 19;
 
-// These are the parameters used for the real world application - to match with input file `data/bfv_2.in`
+// These are the parameters used for the real world application - to match with input file `data/bfv/bfv.in`
 // const N: usize = 1024;
 // const Q: u64 = 536870909;
 // const T: u64 = 7;
