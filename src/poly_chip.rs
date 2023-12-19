@@ -278,46 +278,36 @@ impl<F: Field> PolyChip<F> {
         assert!(z < y);
 
         // The goal is to check that coeff is in the range [0, z] OR [y-z, y-1]
-        // We split this check into two checks:
-        // - Check that coeff is in the range [0, z] and store the boolean result in in_partial_range_1_vec
-        // - Check that coeff is in the range [y-z, y-1] and store the boolean result in in_partial_range_2_vec
-        // We then perform (`in_partial_range_1` OR `in_partial_range_2`) to check that coeff is in the range [0, z] OR [y-z, y-1]
-        // Eventually, enforce that `in_range` = true
-
-        // get the number of bits needed to represent the value of y
-        let y_bits = BigInt::from(y).bits();
+        // We split this check into the following checks:
+        // - Enforce that coeff is less that y
+        // - Check that coeff is less than z+1 and store the boolean result in in_partial_range_1
+        // - Check that coeff is greater than y-z-1 and store the boolean result in in_partial_range_2
+        // - Enforce that in_partial_range_1 OR in_partial_range_2 is true
 
         let z_plus_one_const = Constant(F::from(z + 1));
         let y_minus_z_const = Constant(F::from(y - z));
         let y_const = Constant(F::from(y));
+        let y_bits = BigInt::from(y).bits();
 
         for coeff in self.assigned_coefficients.iter() {
-            // First of all, enforce that coefficient is in the [0, 2^y_bits] range
-            range.check_less_than_safe(ctx, *coeff, (1 << y_bits) + 1);
+            // First of all, enforce that coeff is less than y
+            range.check_less_than_safe(ctx, *coeff, y);
 
-            // Check for the range [0, z]
+            // Check that coeff is less than z+1
             // coeff is known are known to have <= `y_bits` bits according to the constraint set above
-            // z + 1 is known to have <= `y_bits` bits according to assumption of the function
+            // z+1 is known to have <= `y_bits` bits according to assumption of the function
             // Therefore it satisfies the assumption of `is_less_than` chip
             let in_partial_range_1 =
                 range.is_less_than(ctx, *coeff, z_plus_one_const, y_bits as usize);
 
-            // Check for the range [y-z, y-1]
+            // Check that coeff is greater than y-z-1
+            // This is equivalent to check that coeff is less than y-z and negate the result
             // coeff is known are known to have <= `y_bits` bits according to the constraint set above
             // y - z is known to have <= `y_bits` bits according to assumption of the function
             // Therefore it satisfies the assumption of `is_less_than` chip
-            let not_in_range_lower_bound =
+            let not_in_partial_range_2 =
                 range.is_less_than(ctx, *coeff, y_minus_z_const, y_bits as usize);
-            let in_range_lower_bound = range.gate.not(ctx, not_in_range_lower_bound);
-
-            // coeff is known are known to have <= `y_bits` bits according to the constraint set above
-            // y is known to have <= `y_bits` by definition
-            // Therefore it satisfies the assumption of `is_less_than` chip
-            let in_range_upper_bound = range.is_less_than(ctx, *coeff, y_const, y_bits as usize);
-            let in_partial_range_2 =
-                range
-                    .gate
-                    .and(ctx, in_range_lower_bound, in_range_upper_bound);
+            let in_partial_range_2 = range.gate.not(ctx, not_in_partial_range_2);
 
             // Combined check for [0, z] OR [y-z, y-1]
             let in_range = range.gate.or(ctx, in_partial_range_1, in_partial_range_2);
