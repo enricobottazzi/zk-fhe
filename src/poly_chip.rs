@@ -386,7 +386,7 @@ impl<F: Field> PolyChip<F> {
     /// # Assumptions
     /// * The first `degree` coefficients of the polynomial are known to be zero, otherwise the constraint will fail
     /// * `degree` <= `self.degree``
-    pub fn safe_trim_leading_zeroes(
+    fn safe_trim_leading_zeroes(
         &self,
         ctx: &mut Context<F>,
         range: &RangeChip<F>,

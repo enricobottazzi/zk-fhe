@@ -64,7 +64,7 @@ impl Poly {
     }
 
     /// Get the max number of bits.
-    pub fn max_bits(&self) -> u64 {
+    fn max_bits(&self) -> u64 {
         self.max_bits
     }
 
