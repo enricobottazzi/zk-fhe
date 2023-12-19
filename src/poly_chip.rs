@@ -324,8 +324,7 @@ impl<F: Field> PolyChip<F> {
             let in_range = range.gate.or(ctx, in_partial_range_1, in_partial_range_2);
 
             // Enforce that in_range = true
-            let bool = range.gate.is_equal(ctx, in_range, one_const);
-            range.gate.assert_is_const(ctx, &bool, &F::from(1));
+            range.gate.assert_is_const(ctx, &in_range, &F::from(1));
         }
     }
 
