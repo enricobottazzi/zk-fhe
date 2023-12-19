@@ -290,7 +290,6 @@ impl<F: Field> PolyChip<F> {
         let z_plus_one_const = Constant(F::from(z + 1));
         let y_minus_z_const = Constant(F::from(y - z));
         let y_const = Constant(F::from(y));
-        let one_const = Constant(F::from(1));
 
         for coeff in self.assigned_coefficients.iter() {
             // First of all, enforce that coefficient is in the [0, 2^y_bits] range
