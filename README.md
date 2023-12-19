@@ -3,8 +3,6 @@ Zk proving the correct execution of encryption operation under BFV Fully Homomor
 
 Implementation based on [Revisiting Homomorphic Encryption Schemes for Finite Fields](https://eprint.iacr.org/2021/204.pdf)
 
-The application is not production ready and is only meant to be used for educational purposes.
-
 ## Disclaimer
 
 This is a research project and is not meant to be used in production. The code is not audited.
@@ -41,13 +39,15 @@ This will generate a proving key `data/bfv.pk` and a verifying key `data/bfv.vk`
 cargo run --example bfv -- --name bfv -k 9 --input bfv_test/bfv.in prove
 ```
 
-Note that during proof generation we must pass an input file containing the actual input data. 
+Note: during proof generation we must pass an input file containing the actual input data. 
 
 **Proof Verification**
 
 ```
-cargo run --example bfv -- --name bfv -k 9 --input bfv_test/bfv.in verify
+cargo run --example bfv -- --name bfv -k 9 --input bfv_test/bfv_empty.in verify
 ```
+
+Note: during proof verification we can pass an empty input file.
 
 ## Benchmarks
 
@@ -71,7 +71,7 @@ Then run the following commands:
 cargo run --example bfv -- --name bfv -k 13 --input bfv/bfv.in mock
 cargo run --example bfv -- --name bfv -k 13 --input bfv/bfv_empty.in keygen
 cargo run --example bfv -- --name bfv -k 13 --input bfv/bfv.in prove
-cargo run --example bfv -- --name bfv -k 13 --input bfv/bfv.in verify
+cargo run --example bfv -- --name bfv -k 13 --input bfv/bfv_empty.in verify
 ```
 
 ## Warning: Overflow 
