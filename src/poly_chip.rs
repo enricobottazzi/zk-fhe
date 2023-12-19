@@ -361,8 +361,7 @@ impl<F: Field> PolyChip<F> {
             let factor_1_2_3 = gate.mul(ctx, factor_1_2, factor_3);
 
             // constrain (a - 0) * (a - 1) * (a - z) = 0
-            let bool = gate.is_zero(ctx, factor_1_2_3);
-            gate.assert_is_const(ctx, &bool, &F::from(1));
+            gate.assert_is_const(ctx, &factor_1_2_3, &F::from(0));
         }
     }
 
