@@ -294,8 +294,7 @@ impl<F: Field> PolyChip<F> {
 
         for coeff in self.assigned_coefficients.iter() {
             // First of all, enforce that coefficient is in the [0, 2^y_bits] range
-            let bool = range.is_less_than_safe(ctx, *coeff, (1 << y_bits) + 1);
-            range.gate().assert_is_const(ctx, &bool, &F::from(1));
+            range.check_less_than_safe(ctx, *coeff, (1 << y_bits) + 1);
 
             // Check for the range [0, z]
             // coeff is known are known to have <= `y_bits` bits according to the constraint set above
@@ -381,11 +380,11 @@ impl<F: Field> PolyChip<F> {
     }
 
     /// Safely trim the first leading zeroes of the polynomial up to `degree`
-    /// Example: if self of degree 8 is [0, 0, 1, 1, 1, 1, 1, 1, 1] and degree = 6, then the output is [1, 1, 1, 1, 1, 1, 1]
+    /// Example: if self of degree 8 is `[0, 0, 1, 1, 1, 1, 1, 1, 1]` and degree = 6, then the output is `[1, 1, 1, 1, 1, 1, 1]`
     ///
     /// # Assumptions
-    /// * The first `degree` coefficients of the polynomial are known to be zero, otherwise the constraint will fail
-    /// * `degree` <= `self.degree``
+    /// * The first `self.degree - degree` coefficients of the polynomial are known to be zero, otherwise the constraint will fail
+    /// * `degree <= self.degree`
     fn safe_trim_leading_zeroes(
         &self,
         ctx: &mut Context<F>,
