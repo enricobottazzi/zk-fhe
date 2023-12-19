@@ -111,17 +111,14 @@ impl Poly {
     /// # Assumptions
     /// * `cyclo` is a cyclotomic polynomial of form `x^n + 1`
     pub fn divide_by_cyclo(&self, cyclo: &Poly, modulus: u64) -> (Self, Self) {
-        // assert that cyclo is actually a cyclotomic polynomial
-        assert_eq!(cyclo.coefficients[0], BigInt::from(1u32));
-        for i in 1..cyclo.deg() {
-            assert!(cyclo.coefficients[i].is_zero());
-        }
-        assert_eq!(cyclo.coefficients[cyclo.deg()], BigInt::from(1u32));
+        // In division by a cyclotomic polynomial, the quotient polynomial have at most modulus.bits() bits. => https://hackmd.io/EcLZAJiyQRShalL3BLZJ7Q?view#Polynomial-Division
+        // After reduction by modulus, the remainder polynomial have at most modulus.bits() bits.
+        let modulus_bits = BigInt::from(modulus).bits();
 
         if self.coefficients.is_empty() || self.coefficients.iter().all(BigInt::is_zero) {
             return (
-                Self::from_big_int(vec![BigInt::zero(); cyclo.deg() + 1], 0),
-                Self::from_big_int(vec![BigInt::zero(); 2 * cyclo.deg() + 1], 0),
+                Self::from_big_int(vec![BigInt::zero(); cyclo.deg() + 1], modulus_bits), // We set `max_bits` to `modulus_bits` for correct `keygen` phase
+                Self::from_big_int(vec![BigInt::zero(); 2 * cyclo.deg() + 1], modulus_bits), // We set `max_bits` to `modulus_bits` for correct `keygen` phase
             );
         }
 
@@ -173,11 +170,6 @@ impl Poly {
             .iter()
             .map(|x| x.mod_floor(&BigInt::from(modulus)))
             .collect();
-
-        // In division by a cyclotomic polynomial, the quotient polynomial have at most modulus.bits() bits. => https://hackmd.io/EcLZAJiyQRShalL3BLZJ7Q?view#Polynomial-Division
-        // After reduction by modulus, the remainder polynomial have at most modulus.bits() bits.
-        let modulus_bits = BigInt::from(modulus).bits();
-
         (
             Self::from_big_int(quotient, modulus_bits),
             Self::from_big_int(remainder, modulus_bits),
