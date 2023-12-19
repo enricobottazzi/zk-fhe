@@ -392,8 +392,9 @@ impl<F: Field> PolyChip<F> {
         assert!(degree <= self.degree);
 
         for i in 0..self.degree - degree {
-            let bool = range.gate.is_zero(ctx, self.assigned_coefficients[i]);
-            range.gate.assert_is_const(ctx, &bool, &F::from(1));
+            range
+                .gate
+                .assert_is_const(ctx, &self.assigned_coefficients[i], &F::from(0));
         }
 
         // Now we can safely trim the first self.degree - degree coefficients from self
