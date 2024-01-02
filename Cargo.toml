@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 axiom-eth = { git = "https://github.com/axiom-crypto/axiom-eth.git", branch = "community-edition", default-features = false, features = ["halo2-axiom", "aggregation", "evm", "clap"] }
 halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", tag = "v0.3.0-ce" }
-halo2-scaffold = {git = "https://github.com/axiom-crypto/halo2-scaffold" }
+halo2-scaffold = {git = "https://github.com/axiom-crypto/halo2-scaffold", tag = "v0.2.0" }
 clap = { version = "=4.0.13", features = ["derive"] }
 serde = { version = "=1.0", default-features = false, features = ["derive"] }
 env_logger = "=0.10"
@@ -17,6 +17,7 @@ num-bigint = "0.4"
 num-traits = "0.2.17"
 num-integer = "0.1.44"
 colored = "=2.0.0"
+ahash = "=0.8.6"
 
 # Dev / testing mode. We make opt-level = 3 to improve proving times (otherwise it is really slow)
 [profile.dev]

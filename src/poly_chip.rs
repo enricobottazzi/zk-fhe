@@ -286,7 +286,6 @@ impl<F: Field> PolyChip<F> {
 
         let z_plus_one_const = Constant(F::from(z + 1));
         let y_minus_z_const = Constant(F::from(y - z));
-        let y_const = Constant(F::from(y));
         let y_bits = BigInt::from(y).bits();
 
         for coeff in self.assigned_coefficients.iter() {
