@@ -1,4 +1,8 @@
 # zk-fhe
+
+> [!IMPORTANT]  
+> This library has been discontinued in favour of [Greco](https://github.com/privacy-scaling-explorations/greco)
+
 Zk proving the correct execution of encryption operation under BFV Fully Homomorphic Encryption scheme
 
 Implementation based on [Revisiting Homomorphic Encryption Schemes for Finite Fields](https://eprint.iacr.org/2021/204.pdf)
